@@ -32,6 +32,13 @@ rechazan redirects, validan certificados HTTPS y devuelven solamente estado
 sanitizado en memoria, sin caché. Tratá el acceso de escritura al archivo como
 permiso para originar tráfico de red desde el workload de Testkit.
 
+El endpoint opcional de persistencia tampoco tiene autenticación y debe
+habilitarse únicamente en workloads de prueba descartables. La ruta queda fija
+al iniciar mediante `TESTKIT_PERSISTENCE_FILE`; las solicitudes no eligen
+archivos. Las respuestas exponen solo tamaño y fingerprint SHA-256, pero
+cualquier cliente con acceso puede reemplazar el marcador. No almacenes
+credenciales ni datos sensibles en él.
+
 ## Reportar una vulnerabilidad
 
 El reporte privado de vulnerabilidades de GitHub todavía no está habilitado en

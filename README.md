@@ -35,6 +35,7 @@ diagnostics remain an explicit container command.
 | WebSocket echo and broadcast | `GET /ws` |
 | HTTP/HTTPS network probe | `testkit probe URL` |
 | Configured peer identity and state | `GET /api/identity`, `GET /api/peers` |
+| Optional persistent marker metadata | `GET`, `PUT /api/persistence` |
 
 The build version stored in the tracked `VERSION` file is embedded in the Go
 binary and exposed in protocol payloads, structured logs, the browser header and
@@ -220,8 +221,14 @@ connections are rejected.
 | --- | --- | --- |
 | `SSE_INTERVAL` | `1s` | Interval between SSE status events. |
 | `TESTKIT_PEERS_FILE` | unset | Read-only peer configuration; unset disables peer monitoring and its HTTP endpoints. |
+| `TESTKIT_PERSISTENCE_FILE` | unset | Absolute marker file path; unset disables the persistence endpoint. |
 
 Invalid or non-positive `SSE_INTERVAL` values fall back to the default.
+When persistence is enabled, `PUT /api/persistence` accepts `{"value":"..."}`
+with 1–4096 bytes and writes it atomically. `GET` and `PUT` return only whether
+the marker exists, its byte size, and its SHA-256 fingerprint; the marker value
+is never returned. Mount a writable persistent volume at the configured file's
+parent directory when using a read-only root filesystem.
 
 ## Structured logs
 

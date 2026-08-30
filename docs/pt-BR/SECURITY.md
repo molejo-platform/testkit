@@ -32,6 +32,13 @@ certificados HTTPS e retornam apenas estado sanitizado em memória, sem cache.
 Trate acesso de escrita ao arquivo como permissão para originar tráfego de rede
 a partir do workload do Testkit.
 
+O endpoint opcional de persistência também não possui autenticação e deve ser
+habilitado somente em workloads de teste descartáveis. O caminho é fixado na
+inicialização por `TESTKIT_PERSISTENCE_FILE`; requisições não escolhem arquivos.
+As respostas expõem apenas tamanho e fingerprint SHA-256, mas qualquer cliente
+com acesso pode substituir o marcador. Não armazene credenciais nem dados
+sensíveis nele.
+
 ## Reportando uma vulnerabilidade
 
 O relato privado de vulnerabilidades do GitHub ainda não está habilitado neste

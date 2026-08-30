@@ -158,6 +158,7 @@ type handlerConfig struct {
 	sseInterval time.Duration
 	logger      *slog.Logger
 	peers       *peerMonitor
+	persistence *persistenceStore
 }
 
 type application struct {
@@ -260,12 +261,20 @@ func main() {
 		logger.ErrorContext(ctx, "peer configuration failed", "event", "peers.configuration_failed", "error", err)
 		os.Exit(1)
 	}
+	var persistence *persistenceStore
+	if persistencePath := strings.TrimSpace(os.Getenv("TESTKIT_PERSISTENCE_FILE")); persistencePath != "" {
+		persistence, err = newPersistenceStore(persistencePath)
+		if err != nil {
+			logger.ErrorContext(ctx, "persistence configuration failed", "event", "persistence.configuration_failed", "error", err)
+			os.Exit(1)
+		}
+	}
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		logger.ErrorContext(ctx, "server listen failed", "event", "server.listen_failed", "error", err)
 		os.Exit(1)
 	}
-	app := newApplication(handlerConfig{sseInterval: sseIntervalFromEnv(), logger: logger, peers: peerMonitor})
+	app := newApplication(handlerConfig{sseInterval: sseIntervalFromEnv(), logger: logger, peers: peerMonitor, persistence: persistence})
 	logger.InfoContext(ctx, "server started", "event", "server.started", "listen_address", listener.Addr().String())
 	if err := serve(ctx, listener, app); err != nil {
 		logger.ErrorContext(ctx, "server failed", "event", "server.failed", "error", err)
@@ -403,6 +412,9 @@ func newApplication(config handlerConfig) *application {
 	if config.peers != nil {
 		mux.HandleFunc(peerIdentityPath, exactGET(peerIdentityPath, config.peers.identityHandler))
 		mux.HandleFunc("/api/peers", exactGET("/api/peers", config.peers.stateHandler))
+	}
+	if config.persistence != nil {
+		mux.HandleFunc("/api/persistence", logHTTPRequest(config.logger, "/api/persistence", config.persistence.handler))
 	}
 	mux.HandleFunc("/graphql", graphQL)
 	mux.HandleFunc("/events", exactGET("/events", func(writer http.ResponseWriter, request *http.Request) {

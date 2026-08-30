@@ -35,6 +35,7 @@ saída. Diagnósticos pontuais continuam exigindo um comando explícito do cont�
 | Echo e broadcast WebSocket | `GET /ws` |
 | Probe de rede HTTP/HTTPS | `testkit probe URL` |
 | Identidade e estado de pares configurados | `GET /api/identity`, `GET /api/peers` |
+| Metadados do marcador persistente opcional | `GET`, `PUT /api/persistence` |
 
 A versão armazenada no arquivo versionado `VERSION` é embutida no binário Go e
 exposta nos payloads dos protocolos, nos logs estruturados, no cabeçalho e
@@ -221,8 +222,14 @@ navegadores são rejeitadas.
 | --- | --- | --- |
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de status SSE. |
 | `TESTKIT_PEERS_FILE` | não definido | Configuração somente leitura; ausente desabilita o monitor e seus endpoints. |
+| `TESTKIT_PERSISTENCE_FILE` | não definido | Caminho absoluto do marcador; ausente desabilita o endpoint de persistência. |
 
 Valores inválidos ou não positivos de `SSE_INTERVAL` usam o padrão.
+Quando a persistência está habilitada, `PUT /api/persistence` aceita
+`{"value":"..."}` com 1–4096 bytes e grava de forma atômica. `GET` e `PUT`
+retornam somente existência, tamanho em bytes e fingerprint SHA-256; o valor
+nunca é devolvido. Monte um volume persistente gravável no diretório pai do
+arquivo ao usar filesystem raiz somente leitura.
 
 ## Logs estruturados
 

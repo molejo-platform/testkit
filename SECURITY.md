@@ -30,6 +30,12 @@ variables, reject redirects, validate HTTPS certificates, and return only
 sanitized, non-cacheable in-memory state. Treat write access to the peer file as
 equivalent to permission to originate network traffic from the Testkit workload.
 
+The optional persistence endpoint is also unauthenticated and must be enabled
+only in disposable test workloads. Its file path is fixed at process startup by
+`TESTKIT_PERSISTENCE_FILE`; requests cannot choose paths. Responses expose only
+size and SHA-256 metadata, but anyone who can reach the endpoint can replace the
+marker. Do not store credentials or other sensitive values in it.
+
 ## Reporting a vulnerability
 
 GitHub private vulnerability reporting is not enabled for this repository yet.

@@ -36,6 +36,7 @@ comando explícito del contenedor.
 | Echo y broadcast WebSocket | `GET /ws` |
 | Probe de red HTTP/HTTPS | `testkit probe URL` |
 | Identidad y estado de pares configurados | `GET /api/identity`, `GET /api/peers` |
+| Metadatos del marcador persistente opcional | `GET`, `PUT /api/persistence` |
 
 La versión almacenada en el archivo versionado `VERSION` se integra en el
 binario Go y se expone en los payloads de los protocolos, en los logs
@@ -224,9 +225,15 @@ cross-origin de navegadores son rechazadas.
 | --- | --- | --- |
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de estado SSE. |
 | `TESTKIT_PEERS_FILE` | no definido | Configuración de solo lectura; ausente deshabilita el monitor y sus endpoints. |
+| `TESTKIT_PERSISTENCE_FILE` | no definido | Ruta absoluta del marcador; ausente deshabilita el endpoint de persistencia. |
 
 Los valores inválidos o no positivos de `SSE_INTERVAL` usan el valor
 predeterminado.
+Cuando la persistencia está habilitada, `PUT /api/persistence` acepta
+`{"value":"..."}` con 1–4096 bytes y lo escribe de forma atómica. `GET` y `PUT`
+devuelven únicamente existencia, tamaño en bytes y fingerprint SHA-256; el valor
+nunca se devuelve. Monte un volumen persistente escribible en el directorio padre
+del archivo al usar un filesystem raíz de solo lectura.
 
 ## Logs estructurados
 
