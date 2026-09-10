@@ -38,6 +38,9 @@ stable release until promotion.
   diagnostic workflow and its trust boundary.
 - PostgreSQL now delegates database selection to the server when `database` is
   omitted and reports the effective database and backend process identifier.
+- Reorganized the localized READMEs as consumer guides with image selection,
+  runtime configuration, Docker and Kubernetes recipes, expected outcomes, and
+  troubleshooting; contributor setup and local gates now live in CONTRIBUTING.
 
 ### Fixed
 

@@ -3,225 +3,280 @@
 [English](../../README.md) |
 [Português (Brasil)](../pt-BR/README.md)
 
-> Proyecto experimental en pre-release. Molejo Testkit es una fixture de pruebas,
-> no una aplicación de producción.
+> Proyecto experimental en pre-release. Molejo Testkit es un fixture de pruebas
+> descartable, no una aplicación de producción.
 
-Molejo Testkit es una imagen de contenedor pequeña y determinista para smoke
-tests de conectividad de red y contratos mínimos de transporte HTTP. También puede
-ejercitar la entrega de aplicaciones en Kubernetes y las políticas de red. Un
-único binario Go estático ofrece REST, GraphQL, Server-Sent Events (SSE),
-WebSocket, endpoints de salud y un comando explícito de probe de egreso.
+Molejo Testkit es una imagen de contenedor pequeña para comprobar alcance de red,
+entrega de aplicaciones y contratos mínimos de transporte. Ejecutala junto al
+sistema que querés inspeccionar, activá una de sus interfaces fijas y validá la
+respuesta observable.
 
-El servidor HTTP público y el probe de red arbitrario están separados
-intencionalmente. El modo servidor solo puede llamar a pares declarados en un
-archivo opcional de solo lectura, por lo que una solicitud pública no convierte
-la carga en un proxy de egreso. Los diagnósticos puntuales siguen requiriendo un
-comando explícito del contenedor.
+Un único binario Go no root ofrece health checks, REST, GraphQL, Server-Sent
+Events (SSE), WebSocket, verificación de volumen persistente, monitoreo de peers
+configurados, diagnósticos PostgreSQL limitados y un probe HTTP/HTTPS explícito.
 
-## Objetivo y alcance
+## Elegí la imagen
 
-Testkit responde una pregunta concreta: ¿el cliente puede alcanzar la carga
-descartable y el transporte elegido puede completar su intercambio mínimo? Un
-smoke test WebSocket exitoso confirma el camino de red, el upgrade HTTP, el
-intercambio bidireccional de frames y el cierre básico de ese camino de despliegue.
+Las imágenes publicadas usan este repositorio:
 
-No es una implementación completa ni reemplaza las pruebas de la aplicación. Un
-smoke test exitoso no valida autenticación, autorización, rooms, ruteo, reglas de
-negocio, esquemas completos de mensajes, performance, carga ni dependencias que
-no sean ejercitadas por el escenario.
-
-## Superficies de smoke test
-
-| Capacidad | Interfaz |
-| --- | --- |
-| Aliases de detección de idioma | `GET /`, `GET /websocket`, `GET /rest`, `GET /graphql-lab`, `GET /sse` |
-| Páginas localizadas | `GET /en/`, `GET /pt-BR/`, `GET /es-AR/` |
-| Laboratorios localizados en el navegador | `GET /en/rest`, `/en/graphql-lab`, `/en/sse`, `/en/websocket` y caminos traducidos equivalentes |
-| Assets estáticos | `GET /static/style.css` y branding Molejo incorporado |
-| Liveness | `GET /healthz` |
-| Readiness | `GET /readyz` |
-| Respuesta no disponible | `GET /not-ready` |
-| Estado REST | `GET /api/status` |
-| Colección REST | `GET /api/items` |
-| Echo REST | `POST /api/echo` |
-| GraphQL | `POST /graphql` |
-| Server-Sent Events | `GET /events` |
-| Echo y broadcast WebSocket | `GET /ws` |
-| Probe de red HTTP/HTTPS | `testkit probe URL` |
-| Identidad y estado de pares configurados | `GET /api/identity`, `GET /api/peers` |
-| Metadatos del marcador persistente opcional | `GET`, `PUT /api/persistence` |
-
-La versión almacenada en el archivo versionado `VERSION` se integra en el
-binario Go y se expone en los payloads de los protocolos, en los logs
-estructurados, en el encabezado y pie de página del navegador y en el header
-`Testkit-Version` de toda respuesta HTTP, incluidos los handshakes WebSocket
-exitosos. El pie de página también incluye un pequeño enlace localizado de
-atribución a Molejo con tracking UTM de la versión del build. Esto hace
-observables las pruebas de rollout y transporte sin requerir argumentos externos
-de build ni cambiar la identidad lógica de la carga.
-
-## Requisitos previos
-
-- Go 1.26.x.
-- Docker Engine o Docker Desktop con Buildx habilitado.
-- `curl` para los ejemplos.
-
-## Build y ejecución local
-
-Construí la imagen para la plataforma local de Docker:
-
-```sh
-docker buildx build \
-  --load \
-  --tag molejo-testkit:dev \
-  .
+```text
+ghcr.io/molejo-platform/testkit
 ```
 
-Ejecutala con el contrato restringido esperado por Molejo Platform:
+Definí la imagen una vez antes de seguir los ejemplos:
+
+```sh
+export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.8.0
+docker pull "$TESTKIT_IMAGE"
+```
+
+`v0.8.0` es la imagen estable más reciente publicada al escribir esta guía. Una
+branch de release puede documentar capacidades todavía no presentes en una
+imagen correspondiente. En ambientes automatizados, reemplazá el tag por el
+digest inmutable publicado por la release:
+
+```sh
+export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit@sha256:PEGA_EL_DIGEST_PUBLICADO_AQUI
+```
+
+El proyecto no publica el tag `latest`. No asumas que la branch predeterminada,
+este README y un tag antiguo exponen las mismas capacidades.
+
+## Inicio rápido: transporte de entrada
+
+### 1. Iniciá el contenedor
+
+La configuración predeterminada habilita smokes de transporte en el puerto
+`8080` y no necesita archivos de configuración:
 
 ```sh
 docker run --rm \
+  --name molejo-testkit \
   --publish 8080:8080 \
   --read-only \
   --cap-drop ALL \
   --security-opt no-new-privileges \
-  molejo-testkit:dev
+  "$TESTKIT_IMAGE"
 ```
 
-Validá el contrato REST:
+Resultado esperado: el proceso registra `server.started` y continúa ejecutando
+como UID/GID `65532:65532`.
+
+### 2. Verificá liveness y readiness
+
+En otra terminal:
 
 ```sh
+curl --fail http://localhost:8080/healthz
+curl --fail http://localhost:8080/readyz
 curl --fail http://localhost:8080/api/status
 ```
 
-Respuesta esperada:
+La respuesta de estado incluye la versión exacta incorporada en la imagen:
 
 ```json
 {"status":"ok","version":"v0.8.0"}
 ```
 
-Para ejecutar el servidor en otro puerto, definí `HTTP_PORT`. El valor
-predeterminado es `8080`:
+### 3. Abrí la consola en el navegador
+
+Abrí `http://localhost:8080/`. Testkit detecta el idioma del navegador y redirige
+a `/en/`, `/pt-BR/` o `/es-AR/`. Las páginas REST, GraphQL, SSE y WebSocket
+ejecutan escenarios guiados y limitados y muestran solicitud y respuesta.
+
+### 4. Detenelo
+
+Presioná `Ctrl+C` en la terminal del contenedor. Testkit maneja `SIGTERM`, deja de
+aceptar trabajo, cierra recursos retenidos y drena HTTP y WebSocket dentro del
+límite de shutdown.
+
+## Qué comprueba un smoke exitoso
+
+Testkit responde una pregunta enfocada: ¿este cliente alcanza este workload
+descartable o dependencia configurada explícitamente, y se completa el intercambio
+mínimo seleccionado?
+
+| Superficie | Qué comprueba el éxito |
+| --- | --- |
+| `/healthz`, `/readyz` | El camino HTTP alcanza el proceso Testkit activo. |
+| REST/GraphQL | Solicitud, respuesta, headers y un intercambio limitado se completan. |
+| SSE | Una respuesta HTTP en streaming entrega eventos nombrados. |
+| WebSocket | Upgrade, frames bidireccionales, broadcast y cierre funcionan. |
+| `probe URL` | Una solicitud HTTP/HTTPS de salida retorna `2xx`. |
+| `/api/peers` | Una identidad Testkit configurada fue alcanzada por este proceso. |
+| `/api/persistence` | El path configurado escribe y lee un marcador limitado. |
+| Laboratorio PostgreSQL | Un destino autorizado acepta una operación fija de conexión o catálogo. |
+
+El éxito no valida reglas de negocio, autenticación de producción, autorización,
+salas, schemas de la aplicación, rendimiento, carga, alta disponibilidad, backup
+ni dependencias no relacionadas.
+
+## Interfaces disponibles
+
+| Capacidad | Interfaz |
+| --- | --- |
+| Consola del navegador | `GET /`, `/en/`, `/pt-BR/`, `/es-AR/` |
+| Alias del navegador | `GET /rest`, `GET /graphql-lab`, `GET /sse`, `GET /websocket` |
+| Laboratorios del navegador | `GET /<locale>/rest`, `/graphql-lab`, `/sse`, `/websocket` |
+| Liveness y readiness | `GET /healthz`, `GET /readyz` |
+| Respuesta intencionalmente no lista | `GET /not-ready` |
+| REST | `GET /api/status`, `GET /api/items`, `POST /api/echo` |
+| GraphQL | `POST /graphql` |
+| SSE | `GET /events` |
+| WebSocket | `GET /ws` |
+| Probe explícito de salida | `testkit probe URL` |
+| Identidad de peer configurado | `GET /api/identity`, `GET /api/peers` |
+| Marcador persistente | `GET`, `PUT /api/persistence` |
+| Capacidades PostgreSQL | `GET /api/diagnostics/postgres/capabilities` |
+| Operación PostgreSQL efímera | `POST /api/diagnostics/postgres` |
+| Conexión PostgreSQL retenida | `POST /api/diagnostics/postgres/connections` |
+
+Las interfaces opcionales solo existen cuando su configuración es válida. Paths
+y métodos desconocidos no cuentan como smokes exitosos.
+
+## Verificaciones comunes de protocolo
+
+REST echo:
 
 ```sh
-HTTP_PORT=2020 go run .
-curl --fail http://localhost:2020/api/status
-```
-
-En el contenedor, configurá el mismo puerto dentro y fuera del contenedor:
-
-```sh
-docker run --rm \
-  --env HTTP_PORT=2020 \
-  --publish 2020:2020 \
-  --read-only \
-  --cap-drop ALL \
-  --security-opt no-new-privileges \
-  molejo-testkit:dev
-```
-
-## Smoke test rápido
-
-Después de iniciar el servidor, verificá readiness y ejercitá el intercambio
-mínimo de WebSocket:
-
-Si configuraste `HTTP_PORT`, reemplazá `8080` por su valor en las dos URLs.
-
-```sh
-curl --fail http://localhost:8080/readyz
-wscat --connect ws://localhost:8080/ws
-> {"message":"smoke"}
-```
-
-La respuesta de readiness, el handshake WebSocket exitoso y el mensaje JSON
-recibido confirman la conectividad básica y el camino de transporte. No validan
-funcionalidades específicas de WebSocket de la aplicación.
-
-## Consola del navegador
-
-Abra `http://localhost:8080/` para detectar el idioma del navegador o use
-directamente `/en/`, `/pt-BR/` o `/es-AR/`. Los laboratorios están disponibles
-en los caminos `/rest`, `/graphql-lab`, `/sse` y `/websocket` correspondientes.
-Los laboratorios son verificaciones pequeñas y deterministas de conectividad y
-contrato, no suites de funcionalidades. REST y GraphQL usan presets guiados que
-muestran detalles de solicitud y respuesta. El laboratorio SSE muestra IDs,
-nombres y datos de eventos, con acciones explícitas para conectar, desconectar y
-reconectar. El laboratorio WebSocket muestra dos clientes independientes del
-mismo origen, `Client A` y `Client B`, para observar un intercambio mínimo de
-mensajes y su señal de broadcast. Los clientes del navegador no se reconectan
-automáticamente después de un error o cierre.
-
-## Ejemplos mínimos de protocolo
-
-Echo REST:
-
-```sh
-curl --json '{"hello":"world"}' http://localhost:8080/api/echo
+curl --fail --json '{"hello":"world"}' \
+  http://localhost:8080/api/echo
 ```
 
 GraphQL:
 
 ```sh
-curl --json '{"query":"{ status version echo(message: \"hello\") }"}' \
+curl --fail --json '{"query":"{ status version echo(message: \"hello\") }"}' \
   http://localhost:8080/graphql
 ```
 
 SSE:
 
 ```sh
-curl -N http://localhost:8080/events
+curl --no-buffer http://localhost:8080/events
 ```
 
-WebSocket:
+WebSocket con `wscat`:
 
 ```sh
 wscat --connect ws://localhost:8080/ws
 > {"message":"hello"}
 ```
 
-El handshake exitoso y el mensaje recibido son la señal del smoke test de
-WebSocket. La fixture transmite el mismo mensaje determinista a los clientes
-conectados para hacer visible el resultado de transporte; esto no prueba rooms,
-autenticación ni ruteo a nivel de la aplicación.
+La respuesta WebSocket incluye el mensaje y la versión de la imagen. Es una
+señal de transporte, no una implementación de salas o routing de la aplicación.
 
-```json
-{"message":"hello","version":"v0.8.0"}
-```
+## Probe explícito de salida
 
-## Probe de red
-
-Ejecutá diagnósticos de red como un comando explícito de la misma imagen:
+El comando de probe está separado del modo servidor. Realiza un único `GET`
+limitado sin convertir un endpoint HTTP público en un proxy genérico:
 
 ```sh
-docker run --rm molejo-testkit:dev probe https://example.com/
+docker run --rm "$TESTKIT_IMAGE" probe https://example.com/
 ```
 
-El probe realiza una única solicitud HTTP o HTTPS `GET`, con límites, y emite un
-resultado JSON. Está separado de los smoke tests de transporte entrante del
-servidor: valida alcance HTTP/HTTPS explícito de egreso, no conectividad
-WebSocket. Sus códigos de salida forman el contrato de automatización:
+Escribe un resultado JSON y usa códigos de salida seguros para automatización:
 
 | Código | Significado |
 | --- | --- |
-| `0` | El destino respondió con HTTP `2xx`. |
-| `1` | La solicitud falló o devolvió una respuesta distinta de `2xx`. |
-| `2` | Los argumentos del comando o la URL son inválidos. |
+| `0` | El destino retornó HTTP `2xx`. |
+| `1` | La solicitud de red/TLS falló o la respuesta no fue `2xx`. |
+| `2` | Los argumentos o la URL son inválidos. |
 
-Para validar NetworkPolicies de Kubernetes, ejecutá el probe como un Job de corta
-duración en el namespace bajo prueba. Aplicá las labels y la ServiceAccount cuya
-identidad de red querés validar y comprobá el código de salida del Job. Así, el
-origen, el destino y el resultado esperado de permiso o denegación quedan
-explícitos.
+Para validar NetworkPolicies de Kubernetes, ejecutá la imagen como un Job corto
+en el namespace de origen, con los labels y la ServiceAccount cuya identidad de
+red querés probar. Validá el código del Job y eliminalo después.
 
-## Monitoreo de pares configurados
+## Configuración de runtime
 
-El modo servidor puede verificar continuamente una allowlist fija de otras
-instancias de Testkit. La funcionalidad queda deshabilitada salvo que
-`TESTKIT_PEERS_FILE` apunte a un archivo JSON de solo lectura:
+Todas las capacidades se configuran al iniciar. Los valores obligatorios
+inválidos hacen fallar el proceso en vez de deshabilitar silenciosamente una
+capacidad solicitada.
 
-El monitoreo de pares valida la conectividad del transporte y el endpoint de identidad
-configurado de Testkit. No valida compatibilidad de la aplicación ni
-funcionalidades de negocio entre los pares.
+| Variable | Predeterminado | Obligatoria cuando | Propósito |
+| --- | --- | --- | --- |
+| `HTTP_PORT` | `8080` | Nunca | Puerto interno, de `1` a `65535`. |
+| `SSE_INTERVAL` | `1s` | Nunca | Duración Go positiva entre eventos SSE. |
+| `TESTKIT_SMOKES` | `transport` | Nunca | Capacidades: `transport` o `transport,postgres`. |
+| `TESTKIT_PEERS_FILE` | no definida | Monitoreo de peers | Path absoluto del JSON de peers. |
+| `TESTKIT_PERSISTENCE_FILE` | no definida | Marcador persistente | Path absoluto y escribible del marcador. |
+| `TESTKIT_DIAGNOSTIC_TOKEN_FILE` | no definida | PostgreSQL | Path absoluto a un token read-only de al menos 16 bytes. |
+| `TESTKIT_POSTGRES_DESTINATIONS_FILE` | no definida | PostgreSQL | Path absoluto a la política JSON estricta de destinos. |
+
+Los archivos de configuración se leen desde el filesystem del contenedor.
+Montá cada archivo en un path absoluto y usá el mismo path en la variable. Los
+archivos de diagnóstico y peers deben ser read-only. El directorio padre de la
+persistencia debe ser escribible por UID/GID `65532:65532`.
+
+### Puerto HTTP e intervalo SSE personalizados
+
+Configurá el mismo puerto dentro del contenedor y en el mapeo publicado:
+
+```sh
+docker run --rm \
+  --name molejo-testkit \
+  --env HTTP_PORT=2020 \
+  --env SSE_INTERVAL=2s \
+  --publish 2020:2020 \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  "$TESTKIT_IMAGE"
+```
+
+URL esperada: `http://localhost:2020/readyz`.
+
+## Receta: validá persistencia escribible
+
+`TESTKIT_PERSISTENCE_FILE` habilita un pequeño contrato de marcador. Testkit
+guarda como máximo 4096 bytes y retorna solo existencia, tamaño y SHA-256; nunca
+devuelve el valor del marcador.
+
+Primero creá un volumen Docker escribible por el usuario de runtime de Testkit:
+
+```sh
+docker volume create molejo-testkit-data
+docker run --rm \
+  --user 0:0 \
+  --mount type=volume,source=molejo-testkit-data,target=/data \
+  alpine:3.22 chown 65532:65532 /data
+```
+
+Después iniciá Testkit:
+
+```sh
+docker run --rm \
+  --name molejo-testkit \
+  --publish 8080:8080 \
+  --env TESTKIT_PERSISTENCE_FILE=/var/lib/testkit/marker \
+  --mount type=volume,source=molejo-testkit-data,target=/var/lib/testkit \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  "$TESTKIT_IMAGE"
+```
+
+Escribí y leé los metadatos del marcador:
+
+```sh
+curl --fail --request PUT \
+  --header 'Content-Type: application/json' \
+  --data '{"value":"volume-smoke"}' \
+  http://localhost:8080/api/persistence
+
+curl --fail http://localhost:8080/api/persistence
+```
+
+Resultado esperado: `exists` es `true`, `size` es mayor que cero y `sha256`
+permanece igual después de reiniciar Testkit con el mismo volumen.
+
+## Receta: monitoreá peers Testkit configurados
+
+El monitoreo de peers es una verificación periódica y read-only entre instancias
+de Testkit. Cada instancia que sirve `/api/identity` necesita un archivo de peers;
+una instancia que solo recibe verificaciones usa un array `peers` vacío.
+
+Ejemplo de `/config/peers.json`:
 
 ```json
 {
@@ -241,205 +296,240 @@ funcionalidades de negocio entre los pares.
 }
 ```
 
-Cada verificación abre una conexión directa nueva, ignora las variables de
-proxy HTTP, no sigue redirects y solicita el camino fijo `/api/identity`. HTTPS
-usa el trust store del sistema sin modo inseguro. Las respuestas se limitan a 4
-KiB y como máximo cuatro pares se verifican en paralelo. La primera verificación
-es inmediata y las siguientes usan `check_interval`; `timeout` debe ser positivo
-menor o igual a 30 segundos y menor que ese intervalo.
-
-`GET /api/identity` devuelve la identidad lógica configurada y un `boot_id`
-UUIDv7 local al proceso. `GET /api/peers` devuelve únicamente hechos sanitizados
-en memoria sobre las últimas verificaciones. Ambos endpoints existen solo
-cuando el archivo está configurado. Una instancia sin pares de egreso puede usar
-`"peers": []` para servir su identidad. Ningún endpoint acepta un destino ni
-inicia una verificación bajo demanda, y ambas respuestas usan
-`Cache-Control: no-store`.
-
-Los outcomes son `reachable`, `unreachable` y `unknown`. Los reasons distinguen
-fallas de DNS, conexión, TLS, HTTP, respuesta e identidad. Son hechos de
-transporte observados: Testkit nunca afirma que una falla fue causada por una
-NetworkPolicy. Un Service con múltiples réplicas demuestra alcance al Service,
-no a un Pod específico.
-
-## Contrato del contenedor
-
-- Escucha en el puerto TCP `8080` de forma predeterminada; `HTTP_PORT` puede
-  sobrescribirlo en runtime.
-- Se ejecuta como UID/GID `65532:65532`.
-- Admite un filesystem raíz de solo lectura.
-- No requiere capabilities Linux ni escalamiento de privilegios.
-- Incluye un CA bundle para probes HTTPS.
-- Incorpora todos los assets estáticos en el binario.
-- Se compila de manera reproducible para plataformas objetivo de BuildKit,
-  incluyendo `linux/amd64` y `linux/arm64`.
-- Maneja `SIGTERM` y drena conexiones HTTP, SSE y WebSocket con un shutdown
-  limitado.
-
-El servidor acepta conexiones WebSocket del mismo origen y clientes que omiten el
-header `Origin`, como las herramientas de línea de comandos. Las conexiones
-cross-origin de navegadores son rechazadas.
-
-## Configuración
-
-| Variable | Valor predeterminado | Finalidad |
-| --- | --- | --- |
-| `HTTP_PORT` | `8080` | Puerto TCP usado por el servidor HTTP; debe ser un entero entre `1` y `65535`. |
-| `SSE_INTERVAL` | `1s` | Intervalo entre eventos de estado SSE. |
-| `TESTKIT_PEERS_FILE` | no definido | Configuración de solo lectura; ausente deshabilita el monitor y sus endpoints. |
-| `TESTKIT_PERSISTENCE_FILE` | no definido | Ruta absoluta del marcador; ausente deshabilita el endpoint de persistencia. |
-| `TESTKIT_SMOKES` | `transport` | Capacidades separadas por coma. El único valor adicional es `postgres`; valores desconocidos impiden el inicio. |
-| `TESTKIT_DIAGNOSTIC_TOKEN_FILE` | no definido | Archivo de solo lectura con el token operativo requerido cuando `postgres` está habilitado. |
-| `TESTKIT_POSTGRES_DESTINATIONS_FILE` | no definido | Política de destinos de solo lectura requerida cuando `postgres` está habilitado. |
-
-Si `HTTP_PORT` no está definido o está vacío, se usa el valor predeterminado.
-Los valores inválidos hacen que el servidor falle durante el inicio. Los valores
-inválidos o no positivos de `SSE_INTERVAL` usan el valor predeterminado.
-Cuando la persistencia está habilitada, `PUT /api/persistence` acepta
-`{"value":"..."}` con 1–4096 bytes y lo escribe de forma atómica. `GET` y `PUT`
-devuelven únicamente existencia, tamaño en bytes y fingerprint SHA-256; el valor
-nunca se devuelve. Monte un volumen persistente escribible en el directorio padre
-del archivo al usar un filesystem raíz de solo lectura.
-
-Los diagnósticos PostgreSQL son opt-in. Habilitalos con
-`TESTKIT_SMOKES=transport,postgres` y montá ambos archivos obligatorios. La
-política usa JSON estricto, por ejemplo:
-
-```json
-{"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
-```
-
-El navegador envía el token mediante `Authorization: Bearer ...`; ese token de
-la API está separado de la credencial PostgreSQL. El contrato estructurado separa
-`target`, `database` opcional, `identity`, `credential`, `tls_config` y
-`lifecycle`. Los tipos de credencial son `password`, `token` y `none`. Sin
-`database`, PostgreSQL selecciona la base según sus reglas de inicio.
-
-La API expone únicamente `connect`, `arithmetic_check`, `list_databases` y
-`list_schemas`; no acepta SQL. Las operaciones efímeras abren y cierran una
-conexión. Las conexiones retenidas viven solo en memoria, se serializan y deben
-destruirse explícitamente; el shutdown también las cierra. Hay un máximo de ocho
-conexiones retenidas y cuatro solicitudes concurrentes por proceso. Cada
-solicitud tiene un plazo total de 10 segundos y no reintenta. URI y campos
-estructurados son mutuamente exclusivos. TLS usa `verify-full` de forma
-predeterminada; deshabilitarlo es explícito. Los destinos especiales, incluida la
-metadata cloud/container, se rechazan antes de conectar. Serví esta página solo
-mediante HTTPS.
-
-## Logs estructurados
-
-El modo servidor escribe logs JSON delimitados por línea en la salida estándar.
-Cada registro incluye `service` y `version`. Los principales valores de `event`
-son:
-
-- `server.started`, `server.stopped` y eventos de falla del servidor;
-- `http.request.completed` para `/api/status`, `/api/items` y `/api/echo`, con
-  método, ruta estable, código de estado, duración en milisegundos y bytes de
-  respuesta;
-- `connection.opened` y `connection.closed` para WebSocket y SSE, con las
-  cantidades de conexiones activas del protocolo y totales y la duración al cerrar;
-- `connections.snapshot` cada 15 minutos mientras haya al menos una conexión
-  activa.
-- `peer.identity.requested` para solicitudes de identidad entre pares;
-- `peer.state.changed` cuando cambia el outcome, reason o `boot_id` remoto de un
-  par;
-- `peers.snapshot` cada 15 minutos mientras haya un par configurado.
-
-Los eventos de ciclo de vida y snapshots incluyen `connection_sequence`, que
-aumenta con cada transición de estado de conexión en el proceso. Los consumidores
-pueden usarla para reconstruir el orden de las transiciones cuando los registros
-concurrentes llegan fuera de orden.
-
-Las solicitudes REST completadas y las conexiones WebSocket y SSE aceptadas
-incluyen un `correlation_id` UUIDv7. Los clientes REST pueden proporcionarlo
-mediante `X-Testkit-Correlation-ID`; los clientes WebSocket y SSE pueden usar el
-parámetro de query `correlation_id`. Los valores ausentes o inválidos se
-reemplazan por un ID generado por el servidor. Las respuestas REST devuelven el
-ID efectivo en el mismo header. Los labs REST, WebSocket y SSE incluidos generan
-y muestran estos IDs automáticamente. Los snapshots de conexiones permanecen
-agregados y no incluyen IDs de correlación.
-
-Las cantidades representan conexiones aceptadas observadas actualmente por un
-proceso del servidor y se reinician junto con él. Las actualizaciones de página,
-los cierres normales y los errores de transporte disminuyen la cantidad cuando
-el servidor observa la desconexión. Los heartbeats WebSocket limitan la detección
-de fallas silenciosas a cerca de 60 segundos; en SSE, la detección es best effort
-cuando la ruta de red desaparece sin cerrar el stream HTTP. El apagado controlado
-espera que los handlers WebSocket aceptados emitan sus hechos de cierre. Un crash
-o una terminación forzada no puede emitir hechos de cierre, por lo que los
-consumidores deben tratar cada inicio del servidor como una nueva época local al
-proceso.
-
-Los logs no incluyen direcciones de clientes, headers sin procesar, query strings
-sin procesar, payloads de requests, mensajes WebSocket ni datos SSE. Son hechos
-de prueba observables, no métricas durables o globales.
-
-Los hechos de pares usan nombres lógicos y reasons estables. No registran hosts
-configurados, IPs resueltas, configuración de proxy, cuerpos de respuesta ni
-errores crudos. El estado de pares se reinicia junto con el proceso; `boot_id`
-identifica la época local y `observed_boot_id` identifica la última época remota.
-Las verificaciones canceladas por el shutdown no reemplazan el último estado
-observado del par.
-
-## Distribución de la imagen
-
-Las releases versionadas publican imágenes multiplataforma en GitHub Container
-Registry:
-
-```text
-ghcr.io/molejo-platform/testkit:v0.8.0
-```
-
-Los tags existen para descubrimiento. Las pruebas automatizadas deben consumir el
-digest inmutable informado por el pipeline de release:
-
-```text
-ghcr.io/molejo-platform/testkit@sha256:<digest>
-```
-
-El proyecto no publica un tag `latest`. La firma, los SBOMs y las attestations
-adicionales de procedencia quedan fuera del contrato actual de release.
-
-## Desarrollo
-
-Ejecutá el gate local esencial, sin Docker ni servicios externos:
+Montá el archivo y definí su path absoluto en el contenedor:
 
 ```sh
-npm ci
-make test-local
+docker run --rm \
+  --name testkit-a \
+  --env TESTKIT_PEERS_FILE=/etc/testkit/peers.json \
+  --mount type=bind,source="$PWD/config/peers.json",target=/etc/testkit/peers.json,readonly \
+  --publish 8080:8080 \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  "$TESTKIT_IMAGE"
 ```
 
-Usá `make test-browser` para los contratos del navegador, `make test-postgres`
-para un PostgreSQL 18 real y descartable y `make test-full` para todas las capas.
-Las pruebas de integración PostgreSQL usan el build tag `integration` y fallan,
-en vez de omitirse, cuando falta la DSN.
+Inspeccioná el estado sanitizado y local al proceso:
 
-Construí y ejercitá el contenedor final siempre que cambien el runtime, los assets
-incorporados, los probes o el Dockerfile.
+```sh
+curl --fail http://localhost:8080/api/identity
+curl --fail http://localhost:8080/api/peers
+```
 
-## Documentación
+La primera verificación es inmediata. Las siguientes usan `check_interval`.
+Testkit no sigue redirects ni variables de proxy HTTP; HTTPS usa el trust store
+del sistema sin modo inseguro.
 
-El inglés es el idioma canónico de la documentación. Traducciones disponibles:
+## Receta: ejecutá diagnósticos PostgreSQL
 
-- [English](../../README.md)
-- [Português (Brasil)](../pt-BR/README.md)
+Los diagnósticos PostgreSQL son opt-in y requieren dos archivos: un token
+operativo de la API y una allowlist de destinos. El token del deployment está
+separado de la credencial de base usada en el diagnóstico.
 
-Las traducciones conservan en inglés los comandos, paths, endpoints, campos e
-identificadores de protocolo. Si existe una divergencia, la versión en inglés
-define el contrato vigente.
+Esta capacidad no está presente en la imagen publicada `v0.8.0` usada en el
+inicio rápido. Usá un tag o digest futuro que incluya diagnósticos PostgreSQL, o
+construí la candidata actual según la guía de contribución.
 
-Las reglas de identidad visual y el origen de los assets están documentados en el
-[contrato de branding de Molejo Testkit](../BRANDING.md).
+### 1. Creá los archivos de configuración locales
 
-## Contribuir
+Usá un token descartable para este ejemplo y reemplazá el destino por el hostname
+o CIDR que Testkit debe alcanzar:
 
-Leé [CONTRIBUTING.md](CONTRIBUTING.md) antes de proponer un cambio.
+```sh
+mkdir -p config
+printf '%s\n' 'reemplaza-con-al-menos-16-bytes' > config/diagnostic-token
+printf '%s\n' \
+  '{"destinations":[{"host":"db.internal.example","ports":[5432]}]}' \
+  > config/postgres-destinations.json
+chmod 0444 config/diagnostic-token config/postgres-destinations.json
+```
 
-## Seguridad
+No hagas commit del token. En ambientes compartidos, creá el archivo mediante el
+gestor de secretos de la plataforma, no junto a los manifiestos de deployment.
 
-No reportes vulnerabilidades en issues públicas. Seguí
-[SECURITY.md](SECURITY.md).
+### 2. Iniciá Testkit con PostgreSQL habilitado
 
-## Licencia
+```sh
+docker run --rm \
+  --name molejo-testkit \
+  --publish 8080:8080 \
+  --env TESTKIT_SMOKES=transport,postgres \
+  --env TESTKIT_DIAGNOSTIC_TOKEN_FILE=/run/testkit/diagnostic-token \
+  --env TESTKIT_POSTGRES_DESTINATIONS_FILE=/etc/testkit/postgres-destinations.json \
+  --mount type=bind,source="$PWD/config/diagnostic-token",target=/run/testkit/diagnostic-token,readonly \
+  --mount type=bind,source="$PWD/config/postgres-destinations.json",target=/etc/testkit/postgres-destinations.json,readonly \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  "$TESTKIT_IMAGE"
+```
 
-Licenciado bajo la [Apache License 2.0](../../LICENSE).
+Resultado esperado: `http://localhost:8080/es-AR/postgres` existe y
+`/api/diagnostics/postgres/capabilities` describe campos, tipos de credencial,
+modos TLS, ciclos de vida y operaciones fijas soportadas.
+
+### 3. Ejecutá un diagnóstico
+
+La página del navegador es el cliente más simple. Ingresá el token del
+deployment, destino, identidad de base, credencial, TLS y ciclo de vida. La base
+inicial es opcional; cuando se omite, PostgreSQL la selecciona con sus reglas de
+inicio.
+
+| Parte de la conexión | Contrato |
+| --- | --- |
+| `target` | Host obligatorio; puerto predeterminado `5432`. |
+| `database` | Opcional. Omitirla delega a PostgreSQL la selección de la base inicial. |
+| `identity` | Usuario de base obligatorio. |
+| `credential` | Tipo obligatorio: `password`, `token` o `none`. Password/token requieren `secret`; none lo prohíbe. |
+| `tls_config` | Predeterminado `verify-full`; CA privada opcional solo para TLS verificado. |
+| `lifecycle` | `ephemeral` cierra tras una operación; `retained` queda en memoria hasta delete o shutdown. |
+
+`token` es un token generado por el proveedor y enviado mediante el campo de
+password de PostgreSQL; Testkit no genera credenciales IAM, OAuth o de proveedores
+cloud. También se acepta una URI como alternativa a los campos estructurados,
+pero ambos modos no se pueden combinar.
+
+Para automatización, ejecutá una operación efímera directamente:
+
+```sh
+curl --fail --json '{
+  "operation": "connect",
+  "connection": {
+    "target": {"host": "db.internal.example", "port": 5432},
+    "identity": {"user": "testkit"},
+    "credential": {"type": "password", "secret": "reemplaza"},
+    "tls_config": {"mode": "verify-full"},
+    "lifecycle": {"mode": "ephemeral"}
+  }
+}' \
+  --header 'Authorization: Bearer reemplaza-con-al-menos-16-bytes' \
+  http://localhost:8080/api/diagnostics/postgres
+```
+
+Las operaciones disponibles son `connect`, `arithmetic_check`, `list_databases`
+y `list_schemas`. No se acepta SQL arbitrario.
+
+Todas las solicitudes de conexión, operación, inspección y eliminación requieren
+el bearer token del deployment. El endpoint de capacidades es read-only y no lo
+requiere. Un diagnóstico procesado puede retornar HTTP `200` con
+`status: "failed"`; la automatización debe validar `status` y `code` en el JSON,
+no solo el estado HTTP.
+
+Usá lifecycle `retained` con
+`POST /api/diagnostics/postgres/connections` para mantener una conexión física en
+memoria del proceso. Ejecutá operaciones fijas en
+`POST /api/diagnostics/postgres/connections/<id>/operations`, inspeccionala con
+`GET /api/diagnostics/postgres/connections/<id>` y finalizá siempre con
+`DELETE /api/diagnostics/postgres/connections/<id>`.
+
+El servidor limita las conexiones retenidas a ocho y las solicitudes de
+diagnóstico concurrentes a cuatro. Las operaciones tienen un plazo de 10
+segundos y no reintentan. Los secretos no se retornan ni registran. Las
+direcciones loopback, link-local, multicast, no especificadas y de metadata
+cloud permanecen bloqueadas aunque estén en la política.
+
+## Kubernetes: fixture mínimo de transporte
+
+Este ejemplo despliega la imagen predeterminada solo con transporte. Fijá
+`image` al digest validado por tu proceso de release:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: molejo-testkit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: molejo-testkit
+  template:
+    metadata:
+      labels:
+        app: molejo-testkit
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: testkit
+          image: ghcr.io/molejo-platform/testkit:v0.8.0
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: molejo-testkit
+spec:
+  selector:
+    app: molejo-testkit
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+```
+
+Usá ConfigMaps para archivos no secretos de peers y política de destinos,
+Secrets para el token de diagnóstico y un volumen escribible con
+`fsGroup: 65532` para persistencia.
+
+## Comportamiento operativo y de seguridad
+
+- La imagen no requiere capabilities Linux ni elevación de privilegio y admite
+  filesystem raíz read-only.
+- Todos los assets del navegador están incorporados; no requieren volumen.
+- Las solicitudes cross-origin se rechazan en diagnósticos sensibles.
+- Las rutas HTTP públicas no eligen destinos arbitrarios de salida.
+- Los destinos PostgreSQL y de peers se restringen antes de conectar.
+- Los logs excluyen headers, query strings, payloads, credenciales, mensajes
+  WebSocket y datos SSE crudos.
+- Estados de peers, contadores, boot IDs y conexiones de base retenidas son
+  locales al proceso y reinician con él.
+
+La versión incorporada aparece en respuestas, logs, páginas y en el header
+`Testkit-Version`. Usala para distinguir la imagen en ejecución de los
+manifiestos o checkout que esperabas desplegar.
+
+## Solución de problemas al iniciar
+
+| Síntoma | Verificación |
+| --- | --- |
+| El proceso termina inmediatamente | Leé el log estructurado `server.configuration_failed`. |
+| El puerto publicado no responde | Confirmá que puerto externo, interno y `HTTP_PORT` coincidan. |
+| Un endpoint opcional retorna `404` | Confirmá variable y archivo montado al iniciar. |
+| Se rechaza un path de configuración | Los paths internos deben ser absolutos. |
+| El destino PostgreSQL está prohibido | Revisá hostname/CIDR, puerto, DNS y direcciones especiales. |
+| Persistencia retorna `500` | Confirmá que el directorio padre sea escribible por UID/GID `65532`. |
+| Un peer permanece `unknown` | Revisá DNS, timeout, instance ID esperado y archivo remoto. |
+
+## Contribución y desarrollo
+
+Este README es la guía del consumidor para ejecutar la imagen. El build del
+código, los gates locales, los cambios de contrato y la preparación de pull
+requests están documentados por separado en
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+Los problemas de seguridad no deben reportarse en issues públicas. Seguí
+[SECURITY.md](../../SECURITY.md). La identidad visual y la procedencia de los
+assets están en [docs/BRANDING.md](../BRANDING.md).
+
+Licenciado bajo [Apache License 2.0](../../LICENSE).

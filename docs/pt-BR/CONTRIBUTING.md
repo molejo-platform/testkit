@@ -20,17 +20,25 @@ e diretamente relacionadas a uma necessidade de teste.
 Você precisa de:
 
 - Go 1.26.x;
+- Node.js 22.x e npm;
 - Docker com Buildx para validar o contêiner;
-- Git e ferramentas comuns de linha de comando.
+- Make, Git e ferramentas comuns de linha de comando.
 
 Clone o repositório e execute os testes de base antes de modificá-lo:
 
 ```sh
 git clone https://github.com/molejo-platform/testkit.git
 cd testkit
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+npm ci
+make test-local
+```
+
+Construa uma imagem do checkout atual ao validar comportamento ainda não
+publicado:
+
+```sh
+docker buildx build --load --tag molejo-testkit:dev .
+export TESTKIT_IMAGE=molejo-testkit:dev
 ```
 
 ## Realizando alterações
@@ -51,17 +59,24 @@ go mod tidy -diff
 - Use o logo oficial e os tokens semânticos de cor descritos em
   [docs/BRANDING.md](../BRANDING.md) nas alterações da interface do browser.
 
-Formate e valide o código:
+Use o menor gate que comprova a alteração:
 
 ```sh
-gofmt -w *.go
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+make test-local      # formatação, módulos, vet, race/cobertura unitária e frontend
+make test-browser    # contratos do browser contra um servidor Testkit local
+make test-postgres   # integração com build tag e PostgreSQL 18 descartável
+make test-full       # todas as camadas locais acima
 ```
 
-Quando o contrato do contêiner mudar, também construa e execute a imagem com os
-parâmetros restritos documentados no [README.md](README.md).
+`test-local` é o gate essencial e não exige serviço externo. O runner de
+integração PostgreSQL provisiona e remove seu contêiner Docker e falha se a suíte
+com build tag não tiver uma DSN. Use `test-full` antes de enviar alterações que
+atravessem backend, navegador e banco de dados.
+
+Quando o contrato do contêiner mudar, também execute a imagem local com os
+parâmetros restritos documentados no [README.md](README.md). A configuração de
+consumo e as variáveis de runtime pertencem ao README; ferramentas e testes para
+contribuidores pertencem a este documento.
 
 ## Mensagens de commit
 

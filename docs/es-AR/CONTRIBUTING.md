@@ -20,17 +20,25 @@ reproducibles y directamente relacionados con una necesidad de prueba.
 Necesitás:
 
 - Go 1.26.x;
+- Node.js 22.x y npm;
 - Docker con Buildx para validar el contenedor;
-- Git y herramientas comunes de línea de comandos.
+- Make, Git y herramientas comunes de línea de comandos.
 
 Cloná el repositorio y ejecutá las pruebas base antes de modificarlo:
 
 ```sh
 git clone https://github.com/molejo-platform/testkit.git
 cd testkit
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+npm ci
+make test-local
+```
+
+Construí una imagen del checkout actual al validar comportamiento todavía no
+publicado:
+
+```sh
+docker buildx build --load --tag molejo-testkit:dev .
+export TESTKIT_IMAGE=molejo-testkit:dev
 ```
 
 ## Realizar cambios
@@ -51,17 +59,24 @@ go mod tidy -diff
 - Usá el logo oficial y los tokens semánticos de color descritos en
   [docs/BRANDING.md](../BRANDING.md) para cambios en la interfaz del navegador.
 
-Formateá y verificá el código:
+Usá el gate más pequeño que compruebe el cambio:
 
 ```sh
-gofmt -w *.go
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+make test-local      # formato, módulos, vet, race/cobertura unitaria y frontend
+make test-browser    # contratos del navegador contra un servidor Testkit local
+make test-postgres   # integración con build tag y PostgreSQL 18 descartable
+make test-full       # todas las capas locales anteriores
 ```
 
-Cuando cambie el contrato del contenedor, también construí y ejecutá la imagen con
-los parámetros restringidos documentados en [README.md](README.md).
+`test-local` es el gate esencial y no requiere servicios externos. El runner de
+integración PostgreSQL crea y elimina su contenedor Docker y falla si la suite
+con build tag no tiene una DSN. Usá `test-full` antes de enviar cambios que
+atraviesen backend, navegador y base de datos.
+
+Cuando cambie el contrato del contenedor, ejecutá también la imagen local con los
+parámetros restringidos documentados en [README.md](README.md). La configuración
+de consumo y las variables de runtime pertenecen al README; las herramientas y
+pruebas para contribuidores pertenecen a este documento.
 
 ## Mensajes de commit
 

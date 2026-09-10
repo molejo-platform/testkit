@@ -20,17 +20,24 @@ connected to a testing need.
 You need:
 
 - Go 1.26.x;
+- Node.js 22.x and npm;
 - Docker with Buildx for container validation;
-- Git and common command-line tools.
+- Make, Git, and common command-line tools.
 
 Clone the repository and run the baseline tests before modifying it:
 
 ```sh
 git clone https://github.com/molejo-platform/testkit.git
 cd testkit
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+npm ci
+make test-local
+```
+
+Build an image from the current checkout when validating unreleased behavior:
+
+```sh
+docker buildx build --load --tag molejo-testkit:dev .
+export TESTKIT_IMAGE=molejo-testkit:dev
 ```
 
 ## Making changes
@@ -50,17 +57,24 @@ go mod tidy -diff
 - Use the official logo and semantic color tokens described in
   [docs/BRANDING.md](docs/BRANDING.md) for browser interface changes.
 
-Format and verify the code:
+Use the smallest gate that proves the change:
 
 ```sh
-gofmt -w *.go
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
+make test-local      # formatting, modules, vet, race/unit coverage, frontend
+make test-browser    # browser contracts against a local Testkit server
+make test-postgres   # tagged integration suite with disposable PostgreSQL 18
+make test-full       # every local layer above
 ```
 
-When the container contract changes, also build and run the image using the
-restricted flags documented in [README.md](README.md).
+`test-local` is the essential gate and requires no external service. The
+PostgreSQL integration runner provisions and removes its Docker container and
+fails if the tagged suite has no DSN. Use `test-full` before submitting changes
+that cross backend, browser, and database boundaries.
+
+When the container contract changes, also run the locally built image using the
+restricted flags documented in [README.md](README.md). Consumer setup and runtime
+environment variables belong in the README; contributor tooling and test
+procedures belong here.
 
 ## Commit messages
 
