@@ -812,7 +812,7 @@ func TestDashboardRendersWebSocketConsole(t *testing.T) {
 		"/en/graphql-lab",
 		"/en/sse",
 		"/en/websocket",
-		"4 active",
+		"4 ready",
 		`data-locale="en"`,
 		"/static/" + staticAssetVersion + "/style.css",
 		"/static/" + staticAssetVersion + "/app.js",
@@ -835,9 +835,9 @@ func TestProtocolLabPagesRenderLocalizedContracts(t *testing.T) {
 		marker   string
 		back     string
 	}{
-		{path: "/en/rest", locale: "en", content: "REST Lab", endpoint: "/api/*", marker: "data-rest-lab", back: "Back to surface map"},
-		{path: "/pt-BR/graphql-lab", locale: "pt-BR", content: "Laboratório GraphQL", endpoint: "/graphql", marker: "data-graphql-lab", back: "Voltar ao mapa de superfícies"},
-		{path: "/es-AR/sse", locale: "es-AR", content: "Laboratorio SSE", endpoint: "/events", marker: "data-sse-lab", back: "Volver al mapa de superficies"},
+		{path: "/en/rest", locale: "en", content: "REST Lab", endpoint: "/api/*", marker: "data-rest-lab", back: "Back to smoke-test surfaces"},
+		{path: "/pt-BR/graphql-lab", locale: "pt-BR", content: "Laboratório GraphQL", endpoint: "/graphql", marker: "data-graphql-lab", back: "Voltar às superfícies de smoke test"},
+		{path: "/es-AR/sse", locale: "es-AR", content: "Laboratorio SSE", endpoint: "/events", marker: "data-sse-lab", back: "Volver a las superficies de smoke test"},
 	}
 
 	for _, test := range tests {
@@ -1007,7 +1007,7 @@ func TestWebSocketPageRendersBreadcrumbsAndConsole(t *testing.T) {
 		"aria-label=\"Breadcrumb\"",
 		"aria-current=\"page\">WebSocket",
 		"href=\"/en/\">Home",
-		"Back to surface map",
+		"Back to smoke-test surfaces",
 		"build " + version,
 		"Client A",
 		"Client B",

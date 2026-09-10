@@ -17,6 +17,8 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `HTTP_PORT` environment variable for local and containerized runs.
 - Added a localized footer attribution link to `molejo.dev` with build-version
   UTM tracking and responsive link styling.
+- Clarified in the documentation and localized browser copy that Testkit is a
+  connectivity smoke-test fixture, not a feature-complete protocol suite.
 
 ## [0.7.1] - 2026-08-29
 

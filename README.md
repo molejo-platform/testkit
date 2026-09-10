@@ -6,17 +6,30 @@
 > Experimental pre-release project. Molejo Testkit is a test fixture, not a
 > production application.
 
-Molejo Testkit is a small, deterministic container image for exercising HTTP
-applications, Kubernetes application delivery, and network policies. A single
-static Go binary provides REST, GraphQL, Server-Sent Events (SSE), WebSocket,
-health endpoints, and an explicit outbound probe command.
+Molejo Testkit is a small, deterministic container image for smoke-testing
+network reachability and minimal HTTP transport contracts. It can also exercise
+Kubernetes application delivery and network policies. A single static Go binary
+provides REST, GraphQL, Server-Sent Events (SSE), WebSocket, health endpoints,
+and an explicit outbound probe command.
 
 The public HTTP server and arbitrary network probe are intentionally separate.
 Server mode can contact only peers declared in an optional read-only file, so a
 public request cannot turn the workload into an outbound proxy. One-off network
 diagnostics remain an explicit container command.
 
-## Capabilities
+## Purpose and scope
+
+Testkit answers a focused question: can a client reach the disposable workload,
+and can the selected transport complete its minimal exchange? A successful
+WebSocket smoke test confirms the network path, HTTP upgrade, bidirectional frame
+exchange, and basic close behavior for that deployment path.
+
+It is not a feature-complete implementation or a substitute for application
+tests. A successful smoke test does not validate authentication, authorization,
+rooms, routing, business rules, complete message schemas, performance, load,
+or the availability of unrelated dependencies.
+
+## Smoke-test surfaces
 
 | Capability | Interface |
 | --- | --- |
@@ -40,9 +53,10 @@ diagnostics remain an explicit container command.
 The build version stored in the tracked `VERSION` file is embedded in the Go
 binary and exposed in protocol payloads, structured logs, the browser header and
 footer, and the `Testkit-Version` header on every HTTP response, including
-successful WebSocket handshakes. This makes rollout and transport tests
-observable without requiring external build arguments or changing the logical
-identity of the workload.
+successful WebSocket handshakes. The footer also includes a small localized
+Molejo attribution link with build-version UTM tracking. This makes rollout and
+transport tests observable without requiring external build arguments or
+changing the logical identity of the workload.
 
 ## Prerequisites
 
@@ -103,20 +117,37 @@ docker run --rm \
   molejo-testkit:dev
 ```
 
+## Quick smoke test
+
+After starting the server, check readiness and then exercise the minimal
+WebSocket exchange:
+
+If `HTTP_PORT` is configured, replace `8080` with its value in both URLs.
+
+```sh
+curl --fail http://localhost:8080/readyz
+wscat --connect ws://localhost:8080/ws
+> {"message":"smoke"}
+```
+
+The readiness response, successful WebSocket handshake, and returned JSON
+message confirm the basic reachability and transport path. They do not validate
+application-specific WebSocket features.
+
 ## Browser console
 
 Open `http://localhost:8080/` to let the server detect the browser language, or
 use a localized URL directly: `/en/`, `/pt-BR/` or `/es-AR/`. The browser labs
 are available at the matching `/rest`, `/graphql-lab`, `/sse` and `/websocket`
-paths. REST and GraphQL use guided presets that render request and response
-details. The SSE lab displays event IDs, names and data, with explicit connect,
-disconnect and reconnect actions. The WebSocket lab shows two independent
-same-origin clients, `Client A` and `Client B`, so you can connect both panels,
-send a message from either one, and switch between raw JSON events and a chat
-view with local send/receive timestamps. Browser clients do not reconnect
-automatically after an error or close.
+paths. The labs are small, deterministic connectivity and contract checks, not
+feature suites. REST and GraphQL use guided presets that render request and
+response details. The SSE lab displays event IDs, names and data, with explicit
+connect, disconnect and reconnect actions. The WebSocket lab shows two
+independent same-origin clients, `Client A` and `Client B`, so you can observe a
+minimal message exchange and its broadcast signal. Browser clients do not
+reconnect automatically after an error or close.
 
-## Protocol examples
+## Minimal protocol examples
 
 REST echo:
 
@@ -144,8 +175,10 @@ wscat --connect ws://localhost:8080/ws
 > {"message":"hello"}
 ```
 
-Each connected WebSocket client receives the broadcast message with the current
-build version:
+The successful handshake and returned message are the WebSocket smoke signal.
+The fixture broadcasts the same deterministic message to connected clients so
+the transport result is visible; this is not a test of rooms, authentication,
+or application-level routing.
 
 ```json
 {"message":"hello","version":"v0.7.1"}
@@ -160,6 +193,8 @@ docker run --rm molejo-testkit:dev probe https://example.com/
 ```
 
 The probe performs one bounded HTTP or HTTPS `GET` request and emits a JSON result.
+It is separate from the server's incoming transport smoke tests: it validates
+explicit outbound HTTP/HTTPS reachability, not WebSocket connectivity.
 Its exit codes form the automation contract:
 
 | Exit code | Meaning |
@@ -178,6 +213,10 @@ destination, and expected allow-or-deny result explicit.
 Server mode can continuously verify a fixed allowlist of other Testkit
 instances. The feature is disabled unless `TESTKIT_PEERS_FILE` points to a
 read-only JSON file:
+
+Peer monitoring validates transport reachability and the configured Testkit
+identity endpoint. It does not validate application compatibility or business
+features between peers.
 
 ```json
 {

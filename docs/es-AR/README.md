@@ -6,8 +6,9 @@
 > Proyecto experimental en pre-release. Molejo Testkit es una fixture de pruebas,
 > no una aplicación de producción.
 
-Molejo Testkit es una imagen de contenedor pequeña y determinista para ejercitar
-aplicaciones HTTP, entrega de aplicaciones en Kubernetes y políticas de red. Un
+Molejo Testkit es una imagen de contenedor pequeña y determinista para smoke
+tests de conectividad de red y contratos mínimos de transporte HTTP. También puede
+ejercitar la entrega de aplicaciones en Kubernetes y las políticas de red. Un
 único binario Go estático ofrece REST, GraphQL, Server-Sent Events (SSE),
 WebSocket, endpoints de salud y un comando explícito de probe de egreso.
 
@@ -17,7 +18,19 @@ archivo opcional de solo lectura, por lo que una solicitud pública no convierte
 la carga en un proxy de egreso. Los diagnósticos puntuales siguen requiriendo un
 comando explícito del contenedor.
 
-## Capacidades
+## Objetivo y alcance
+
+Testkit responde una pregunta concreta: ¿el cliente puede alcanzar la carga
+descartable y el transporte elegido puede completar su intercambio mínimo? Un
+smoke test WebSocket exitoso confirma el camino de red, el upgrade HTTP, el
+intercambio bidireccional de frames y el cierre básico de ese camino de despliegue.
+
+No es una implementación completa ni reemplaza las pruebas de la aplicación. Un
+smoke test exitoso no valida autenticación, autorización, rooms, ruteo, reglas de
+negocio, esquemas completos de mensajes, performance, carga ni dependencias que
+no sean ejercitadas por el escenario.
+
+## Superficies de smoke test
 
 | Capacidad | Interfaz |
 | --- | --- |
@@ -42,8 +55,10 @@ La versión almacenada en el archivo versionado `VERSION` se integra en el
 binario Go y se expone en los payloads de los protocolos, en los logs
 estructurados, en el encabezado y pie de página del navegador y en el header
 `Testkit-Version` de toda respuesta HTTP, incluidos los handshakes WebSocket
-exitosos. Esto hace observables las pruebas de rollout y transporte sin requerir
-argumentos externos de build ni cambiar la identidad lógica de la carga.
+exitosos. El pie de página también incluye un pequeño enlace localizado de
+atribución a Molejo con tracking UTM de la versión del build. Esto hace
+observables las pruebas de rollout y transporte sin requerir argumentos externos
+de build ni cambiar la identidad lógica de la carga.
 
 ## Requisitos previos
 
@@ -105,21 +120,38 @@ docker run --rm \
   molejo-testkit:dev
 ```
 
+## Smoke test rápido
+
+Después de iniciar el servidor, verificá readiness y ejercitá el intercambio
+mínimo de WebSocket:
+
+Si configuraste `HTTP_PORT`, reemplazá `8080` por su valor en las dos URLs.
+
+```sh
+curl --fail http://localhost:8080/readyz
+wscat --connect ws://localhost:8080/ws
+> {"message":"smoke"}
+```
+
+La respuesta de readiness, el handshake WebSocket exitoso y el mensaje JSON
+recibido confirman la conectividad básica y el camino de transporte. No validan
+funcionalidades específicas de WebSocket de la aplicación.
+
 ## Consola del navegador
 
 Abra `http://localhost:8080/` para detectar el idioma del navegador o use
 directamente `/en/`, `/pt-BR/` o `/es-AR/`. Los laboratorios están disponibles
 en los caminos `/rest`, `/graphql-lab`, `/sse` y `/websocket` correspondientes.
-REST y GraphQL usan presets guiados que muestran detalles de solicitud y
-respuesta. El laboratorio SSE muestra IDs, nombres y datos de eventos, con
-acciones explícitas para conectar, desconectar y reconectar. El laboratorio
-WebSocket muestra dos clientes independientes del mismo origen, `Client A` y
-`Client B`, para conectar ambos paneles, enviar un mensaje desde cualquiera y
-alternar entre eventos JSON crudos y una vista de chat con horarios locales de
-envío y recepción. Los clientes del navegador no se reconectan automáticamente
-después de un error o cierre.
+Los laboratorios son verificaciones pequeñas y deterministas de conectividad y
+contrato, no suites de funcionalidades. REST y GraphQL usan presets guiados que
+muestran detalles de solicitud y respuesta. El laboratorio SSE muestra IDs,
+nombres y datos de eventos, con acciones explícitas para conectar, desconectar y
+reconectar. El laboratorio WebSocket muestra dos clientes independientes del
+mismo origen, `Client A` y `Client B`, para observar un intercambio mínimo de
+mensajes y su señal de broadcast. Los clientes del navegador no se reconectan
+automáticamente después de un error o cierre.
 
-## Ejemplos de protocolos
+## Ejemplos mínimos de protocolo
 
 Echo REST:
 
@@ -147,8 +179,10 @@ wscat --connect ws://localhost:8080/ws
 > {"message":"hello"}
 ```
 
-Cada cliente WebSocket conectado recibe el mensaje de broadcast con la versión de
-build actual:
+El handshake exitoso y el mensaje recibido son la señal del smoke test de
+WebSocket. La fixture transmite el mismo mensaje determinista a los clientes
+conectados para hacer visible el resultado de transporte; esto no prueba rooms,
+autenticación ni ruteo a nivel de la aplicación.
 
 ```json
 {"message":"hello","version":"v0.7.1"}
@@ -163,7 +197,9 @@ docker run --rm molejo-testkit:dev probe https://example.com/
 ```
 
 El probe realiza una única solicitud HTTP o HTTPS `GET`, con límites, y emite un
-resultado JSON. Sus códigos de salida forman el contrato de automatización:
+resultado JSON. Está separado de los smoke tests de transporte entrante del
+servidor: valida alcance HTTP/HTTPS explícito de egreso, no conectividad
+WebSocket. Sus códigos de salida forman el contrato de automatización:
 
 | Código | Significado |
 | --- | --- |
@@ -182,6 +218,10 @@ explícitos.
 El modo servidor puede verificar continuamente una allowlist fija de otras
 instancias de Testkit. La funcionalidad queda deshabilitada salvo que
 `TESTKIT_PEERS_FILE` apunte a un archivo JSON de solo lectura:
+
+El monitoreo de pares valida la conectividad del transporte y el endpoint de identidad
+configurado de Testkit. No valida compatibilidad de la aplicación ni
+funcionalidades de negocio entre los pares.
 
 ```json
 {
