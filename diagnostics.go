@@ -100,7 +100,13 @@ func (policy *destinationPolicy) validate(ctx context.Context, host string, port
 		}
 	}
 	for _, address := range addresses {
-		if forbiddenDiagnosticAddress(address) || !policy.allows(host, address, port) {
+		if forbiddenDiagnosticAddress(address) {
+			if !address.IsLoopback() || !policy.allowsExplicitLoopback(host, port) {
+				return validatedTarget{}, errors.New("destination_not_allowed")
+			}
+			continue
+		}
+		if !policy.allows(host, address, port) {
 			return validatedTarget{}, errors.New("destination_not_allowed")
 		}
 	}
@@ -117,17 +123,35 @@ func (target validatedTarget) dialContext(ctx context.Context, network, _ string
 
 func (policy *destinationPolicy) allows(host string, address netip.Addr, port uint16) bool {
 	for _, rule := range policy.rules {
-		portAllowed := false
-		for _, allowedPort := range rule.Ports {
-			if port == allowedPort {
-				portAllowed = true
-				break
-			}
-		}
-		if !portAllowed {
+		if !rule.allowsPort(port) {
 			continue
 		}
 		if rule.Host == host || (rule.prefix.IsValid() && rule.prefix.Contains(address)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (policy *destinationPolicy) allowsExplicitLoopback(host string, port uint16) bool {
+	explicitLoopback := host == "localhost"
+	if address, err := netip.ParseAddr(host); err == nil {
+		explicitLoopback = address.Unmap().IsLoopback()
+	}
+	if !explicitLoopback {
+		return false
+	}
+	for _, rule := range policy.rules {
+		if rule.Host == host && rule.allowsPort(port) {
+			return true
+		}
+	}
+	return false
+}
+
+func (rule destinationRule) allowsPort(port uint16) bool {
+	for _, allowedPort := range rule.Ports {
+		if port == allowedPort {
 			return true
 		}
 	}

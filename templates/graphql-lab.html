@@ -49,12 +49,18 @@
         </header>
         <div class="lab-output__grid">
           <section class="code-panel">
-            <h3>{{ .T "graphql.query" }}</h3>
-            <pre data-graphql-request>{"query":"{ status version }"}</pre>
+            <div class="code-panel__header">
+              <h3>{{ .T "graphql.query" }}</h3>
+              <button class="code-copy-button" type="button" aria-live="polite" data-json-copy="#graphql-request-json">{{ .T "json.copy" }}</button>
+            </div>
+            <pre id="graphql-request-json" data-graphql-request>{"query":"{ status version }"}</pre>
           </section>
           <section class="code-panel">
-            <h3>{{ .T "lab.response" }}</h3>
-            <pre data-graphql-response>{{ .T "lab.run_to_see" }}</pre>
+            <div class="code-panel__header">
+              <h3>{{ .T "lab.response" }}</h3>
+              <button class="code-copy-button" type="button" aria-live="polite" data-json-copy="#graphql-response-json">{{ .T "json.copy" }}</button>
+            </div>
+            <pre id="graphql-response-json" data-graphql-response>{{ .T "lab.run_to_see" }}</pre>
           </section>
         </div>
         <footer class="lab-output__footer">

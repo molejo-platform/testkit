@@ -7,7 +7,7 @@ class FakeElement {
     this.dataset = {};
     this.listeners = new Map();
     this.className = "";
-    this.textContent = "";
+    this._textContent = "";
     this.hidden = false;
     this.disabled = false;
     this.value = "";
@@ -25,7 +25,24 @@ class FakeElement {
   }
 
   append(...children) {
+    this._textContent = "";
     this.children.push(...children);
+  }
+
+  replaceChildren(...children) {
+    this._textContent = "";
+    this.children = children;
+  }
+
+  get textContent() {
+    return this.children.length > 0
+      ? this.children.map((child) => child.textContent).join("")
+      : this._textContent;
+  }
+
+  set textContent(value) {
+    this._textContent = String(value);
+    this.children = [];
   }
 
   setAttribute(name, value) {

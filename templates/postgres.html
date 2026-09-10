@@ -26,7 +26,16 @@
           <label>{{ .T "postgres.port" }}<input name="port" type="number" min="1" max="65535" value="5432" data-postgres-connection-control></label>
           <label>{{ .T "postgres.user" }}<input name="user" autocomplete="username" data-postgres-connection-control></label>
           <label>{{ .T "postgres.credential_type" }}<select name="credential_type" data-postgres-capability="credential_types" data-postgres-connection-control><option value="password">{{ .T "postgres.password" }}</option><option value="token">Token</option><option value="none">{{ .T "postgres.credential_none" }}</option></select></label>
-          <label data-postgres-credential-secret>{{ .T "postgres.credential_secret" }}<input name="credential_secret" type="password" autocomplete="current-password" data-postgres-connection-control></label>
+          <div class="form-field" data-postgres-credential-secret>
+            <label for="postgres-credential-secret">{{ .T "postgres.credential_secret" }}</label>
+            <div class="input-group">
+              <input id="postgres-credential-secret" name="credential_secret" type="password" autocomplete="current-password" data-postgres-connection-control>
+              <button class="input-group__button" type="button" aria-label="{{ .T "postgres.show_credential_secret" }}" aria-pressed="false" data-label-show="{{ .T "postgres.show_credential_secret" }}" data-label-hide="{{ .T "postgres.hide_credential_secret" }}" data-postgres-toggle-secret data-postgres-connection-control>
+                <svg data-password-icon-show aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                <svg data-password-icon-hide aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 4.2A11.8 11.8 0 0 1 12 4c6.5 0 10 8 10 8a17.7 17.7 0 0 1-2.1 3.2"></path><path d="M6.6 6.6C3.5 8.6 2 12 2 12s3.5 8 10 8a10.7 10.7 0 0 0 5.4-1.5"></path></svg>
+              </button>
+            </div>
+          </div>
           <label>{{ .T "postgres.database" }}<input name="database" autocomplete="off" placeholder="{{ .T "postgres.database_optional" }}" data-postgres-connection-control></label>
           <label>TLS<select name="tls" data-postgres-capability="tls_modes" data-postgres-connection-control><option value="verify-full">verify-full</option><option value="disable">{{ .T "postgres.tls_disable" }}</option></select></label>
           <label>{{ .T "postgres.lifecycle" }}<select name="lifecycle" data-postgres-capability="lifecycle_modes" data-postgres-connection-control><option value="ephemeral">{{ .T "postgres.lifecycle_ephemeral" }}</option><option value="retained">{{ .T "postgres.lifecycle_retained" }}</option></select></label>
@@ -50,7 +59,13 @@
     </form>
     <article class="lab-output diagnostic-output" data-postgres-output aria-busy="false">
       <header class="lab-output__header"><div><p class="preset-panel__label">{{ .T "postgres.effective_target" }}</p><code data-postgres-summary>—</code></div><span class="lab-result-status" role="status" aria-live="polite" data-postgres-status>{{ .T "lab.waiting" }}</span></header>
-      <section class="code-panel"><h3>{{ .T "lab.response" }}</h3><pre data-postgres-response>{{ .T "lab.run_to_see" }}</pre></section>
+      <section class="code-panel">
+        <div class="code-panel__header">
+          <h3>{{ .T "lab.response" }}</h3>
+          <button class="code-copy-button" type="button" aria-live="polite" data-json-copy="#postgres-response-json">{{ .T "json.copy" }}</button>
+        </div>
+        <pre id="postgres-response-json" data-postgres-response>{{ .T "lab.run_to_see" }}</pre>
+      </section>
     </article>
   </section>
   {{ template "page-footer" . }}

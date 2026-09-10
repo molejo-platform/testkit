@@ -15,6 +15,19 @@
     </div>
   </section>
 
+  <section class="protocol-overview" aria-labelledby="protocols-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ .T "home.surface_map" }}</p>
+        <h2 id="protocols-title">{{ .T "home.transport_coverage" }}</h2>
+      </div>
+      <span class="section-count">{{ len .Protocols }} {{ .T "home.active" }}</span>
+    </div>
+    <div class="protocol-grid">
+      {{ range .Protocols }}{{ template "protocol-card" . }}{{ end }}
+    </div>
+  </section>
+
   {{ if .DatabaseProviders }}
   <section class="protocol-overview" aria-labelledby="databases-title">
     <div class="section-heading">
@@ -29,19 +42,6 @@
     </div>
   </section>
   {{ end }}
-
-  <section class="protocol-overview" aria-labelledby="protocols-title">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">{{ .T "home.surface_map" }}</p>
-        <h2 id="protocols-title">{{ .T "home.transport_coverage" }}</h2>
-      </div>
-      <span class="section-count">{{ len .Protocols }} {{ .T "home.active" }}</span>
-    </div>
-    <div class="protocol-grid">
-      {{ range .Protocols }}{{ template "protocol-card" . }}{{ end }}
-    </div>
-  </section>
 
   {{ template "page-footer" . }}
 </main>

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -219,7 +220,30 @@ func TestDiagnosticEndpointRejectsFreeSQLAndCrossOriginBeforeExecution(t *testin
 	}
 }
 
-func TestDestinationPolicyBlocksSpecialAddressesEvenWhenListed(t *testing.T) {
+func TestDestinationPolicyAllowsOnlyExplicitLoopbackHostRules(t *testing.T) {
+	for _, host := range []string{"localhost", "127.0.0.1", "::1"} {
+		t.Run(host, func(t *testing.T) {
+			policy, err := parseDestinationPolicy([]byte(fmt.Sprintf(`{"destinations":[{"host":%q,"ports":[5432]}]}`, host)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, err := policy.validate(context.Background(), host, 5432)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, address := range target.ips {
+				if !address.IsLoopback() {
+					t.Fatalf("resolved non-loopback address %s", address)
+				}
+			}
+			if _, err := policy.validate(context.Background(), host, 5433); err == nil {
+				t.Fatal("allowed a port absent from the exact host rule")
+			}
+		})
+	}
+}
+
+func TestDestinationPolicyBlocksSpecialAddressesFromBroadCIDRs(t *testing.T) {
 	policy, err := parseDestinationPolicy([]byte(`{"destinations":[{"cidr":"0.0.0.0/0","ports":[5432]},{"cidr":"::/0","ports":[5432]}]}`))
 	if err != nil {
 		t.Fatal(err)

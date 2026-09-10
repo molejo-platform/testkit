@@ -1,4 +1,5 @@
 import { createWebSocketClient } from "./ws-client.js";
+import { renderJSON } from "./json-view.js";
 
 const MAX_LOG_ENTRIES = 50;
 
@@ -105,7 +106,7 @@ export function mountWebSocketClient(root, { locale = "en", translate = (key) =>
 
     const payload = document.createElement("code");
     payload.className = "event-log__payload";
-    payload.textContent = JSON.stringify(event.detail);
+    renderJSON(payload, event.detail, { compact: true });
     entry.append(meta, payload);
     log.append(entry);
 

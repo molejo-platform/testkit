@@ -1,5 +1,6 @@
 import { createCorrelationID } from "./correlation-id.js";
 import { createFiniteRequestExecutor } from "./finite-request.js";
+import { mountJSONCopyButtons, renderJSON, renderJSONText, renderText } from "./json-view.js";
 
 const presets = {
   status: { method: "GET", path: "/api/status" },
@@ -7,14 +8,6 @@ const presets = {
   echo: { method: "POST", path: "/api/echo", body: JSON.stringify({ hello: "world" }) },
   invalid: { method: "POST", path: "/api/echo", body: '{"hello":' },
 };
-
-function formatJSON(value) {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
-  }
-}
 
 export function mountRestLab(root, {
   translate = (key) => key,
@@ -55,7 +48,7 @@ export function mountRestLab(root, {
   }
 
   function clearResponse() {
-    responseOutput.textContent = translate("rest.run_to_see");
+    renderText(responseOutput, translate("rest.run_to_see"));
     status.className = "lab-result-status";
     status.textContent = translate("lab.waiting");
     status.setAttribute("role", "status");
@@ -78,7 +71,7 @@ export function mountRestLab(root, {
       button.setAttribute("aria-pressed", String(selected));
     }
     requestLine.textContent = `${preset.method} ${preset.path}`;
-    requestOutput.textContent = JSON.stringify(requestDetails(preset), null, 2);
+    renderJSON(requestOutput, requestDetails(preset));
     clearResponse();
   }
 
@@ -105,7 +98,7 @@ export function mountRestLab(root, {
     if (!preset || running) return;
 
     setRunning(true);
-    responseOutput.textContent = translate("lab.running");
+    renderText(responseOutput, translate("lab.running"));
     status.className = "lab-result-status lab-result-status--running";
     status.textContent = translate("lab.running");
     status.setAttribute("role", "status");
@@ -120,7 +113,7 @@ export function mountRestLab(root, {
     try {
       started = now();
       const correlationID = createCorrelationIDImpl();
-      requestOutput.textContent = JSON.stringify(requestDetails(preset, correlationID), null, 2);
+      renderJSON(requestOutput, requestDetails(preset, correlationID));
       correlationIDOutput.textContent = correlationID;
       const headers = { "X-Testkit-Correlation-ID": correlationID };
       if (preset.body) headers["Content-Type"] = "application/json";
@@ -143,13 +136,13 @@ export function mountRestLab(root, {
       contentType.textContent = response.headers.get("content-type") || translate("lab.not_available");
       version.textContent = response.headers.get("testkit-version") || translate("lab.not_available");
       correlationIDOutput.textContent = response.headers.get("x-testkit-correlation-id") || correlationID;
-      responseOutput.textContent = formatJSON(body);
+      renderJSONText(responseOutput, body);
       status.className = `lab-result-status ${response.ok ? "lab-result-status--ok" : "lab-result-status--error"}`;
       status.textContent = [response.status, response.statusText].filter(Boolean).join(" ");
       hint.textContent = response.ok ? translate("rest.completed") : translate("rest.failed");
     } catch (error) {
       duration.textContent = durationSince(started);
-      responseOutput.textContent = String(error);
+      renderText(responseOutput, error);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       status.setAttribute("role", "alert");
@@ -178,6 +171,7 @@ export function mountRestLab(root, {
   });
 
   output.setAttribute("aria-busy", "false");
+  mountJSONCopyButtons(root, { translate });
   select(selectedName);
 }
 

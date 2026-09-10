@@ -32,12 +32,18 @@ stable release until promotion.
   disposal.
 - GraphQL presets now require explicit execution and distinguish expected
   GraphQL errors from transport failures.
+- JSON requests, responses, and transport event payloads now use shared
+  syntax highlighting with literal-text fallback; static panels can copy their
+  exact displayed content.
 - Split runtime configuration, REST, GraphQL, and shared HTTP helpers out of
   the main server module without changing the existing public routes.
 - Expanded localized documentation and browser content for the PostgreSQL
   diagnostic workflow and its trust boundary.
 - PostgreSQL now delegates database selection to the server when `database` is
   omitted and reports the effective database and backend process identifier.
+- PostgreSQL destination policies now permit loopback only through an exact
+  loopback host and port rule, enabling explicit local diagnostics without
+  weakening CIDR or special-address protections.
 - Reorganized the localized READMEs as consumer guides with image selection,
   runtime configuration, Docker and Kubernetes recipes, expected outcomes, and
   troubleshooting; contributor setup and local gates now live in CONTRIBUTING.
@@ -48,11 +54,13 @@ stable release until promotion.
   observable effects occur.
 - Persistence reads are bounded, and peer request timeouts use a neutral reason
   that does not misclassify the failure stage.
+- PostgreSQL credential inputs now keep one focus outline around the password
+  and visibility control while preserving keyboard focus feedback.
 
 ### Security
 
 - Diagnostic destinations are re-resolved for every attempt, checked against
-  the configured allowlist, rejected for special local/link addresses, and
+  the configured allowlist, denied for loopback unless explicitly named, and
   pinned to the validated IP while preserving TLS hostname verification.
 - Arbitrary SQL, inherited PostgreSQL credential files, redirects, cross-origin
   browser requests, oversized inputs, secret echoing, and unbounded diagnostic

@@ -19,6 +19,20 @@ test("REST reports a network error and allows an explicit retry", async ({ page 
   await expect(page.locator("[data-rest-status]")).toContainText("200");
 });
 
+test("JSON panels expose semantic tokens, copy exact content, and contain narrow overflow", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:8080" });
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/en/rest");
+
+  const request = page.locator("[data-rest-request]");
+  await expect(request.locator(".json-token--key")).toContainText(["method", "path"]);
+  await page.getByRole("button", { name: "Copy JSON" }).first().click();
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await request.textContent());
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await expect(request).toHaveCSS("overflow-x", "auto");
+});
+
 test("home remains within a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto("/pt-BR/");
@@ -26,17 +40,32 @@ test("home remains within a narrow viewport", async ({ page }) => {
   await expect(page.locator("main")).toBeVisible();
 });
 
+test("home places database diagnostics below transport smoke tests", async ({ page }) => {
+  await page.goto("/en/");
+  await expect(page.locator("main > .protocol-overview h2")).toHaveText([
+    "Transport smoke tests",
+    "Database diagnostics",
+  ]);
+});
+
 test("PostgreSQL keeps secrets out of the effective-target summary and clears them", async ({ page }) => {
   await page.goto("/en/postgres");
   await page.getByLabel("Deployment access token").fill("browser-test-token");
   await page.getByLabel("Host").fill("203.0.113.10");
   await page.getByLabel("User").fill("operator");
-  await page.getByLabel("Credential secret").fill("sentinel-password");
+  await page.getByLabel("Credential secret", { exact: true }).fill("sentinel-password");
+  await expect(page.locator("[data-postgres-credential-secret] .input-group")).toHaveCSS("outline-style", "solid");
+  await expect(page.getByLabel("Credential secret", { exact: true })).toHaveCSS("outline-style", "none");
+  await expect(page.getByLabel("Credential secret", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show credential secret" }).click();
+  await expect(page.getByLabel("Credential secret", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide credential secret" }).click();
+  await expect(page.getByLabel("Credential secret", { exact: true })).toHaveAttribute("type", "password");
   await expect(page.locator("[data-postgres-summary]")).toContainText("203.0.113.10:5432");
   await expect(page.locator("[data-postgres-summary]")).not.toContainText("sentinel-password");
   await page.getByRole("button", { name: "Clear credentials and result" }).click();
   await expect(page.getByLabel("Deployment access token")).toHaveValue("");
-  await expect(page.getByLabel("Credential secret")).toHaveValue("");
+  await expect(page.getByLabel("Credential secret", { exact: true })).toHaveValue("");
 });
 
 test("PostgreSQL reveals fields from capabilities and drives retained lifecycle", async ({ page }) => {
@@ -57,7 +86,7 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
   await page.getByLabel("Host").fill("203.0.113.10");
   await page.getByLabel("User").fill("operator");
   await page.getByLabel("Credential type").selectOption("none");
-  await expect(page.getByLabel("Credential secret")).toBeHidden();
+  await expect(page.getByLabel("Credential secret", { exact: true })).toBeHidden();
   await page.getByLabel("TLS").selectOption("disable");
   await expect(page.getByLabel("Private server CA (PEM, optional)")).toBeHidden();
   await page.getByLabel("Connection lifecycle").selectOption("retained");

@@ -423,9 +423,12 @@ memória do processo. Execute operações fixas em
 
 O servidor limita conexões retidas a oito e requisições de diagnóstico
 concorrentes a quatro. Operações têm prazo de 10 segundos e não fazem retry.
-Segredos não são retornados nem registrados. Endereços loopback, link-local,
-multicast, não especificados e de metadata cloud permanecem bloqueados mesmo se
-forem listados na política.
+Segredos não são retornados nem registrados. Loopback só é permitido quando
+`localhost` ou um IP de loopback literal aparece em uma regra `host` exata com a
+porta solicitada; uma regra CIDR não pode liberá-lo. Endereços link-local,
+multicast, não especificados e de metadata cloud permanecem bloqueados. A
+política é carregada uma vez na inicialização; reinicie o Testkit após editar o
+arquivo.
 
 ## Kubernetes: fixture mínimo de transporte
 

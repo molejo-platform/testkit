@@ -425,9 +425,12 @@ memoria del proceso. Ejecutá operaciones fijas en
 
 El servidor limita las conexiones retenidas a ocho y las solicitudes de
 diagnóstico concurrentes a cuatro. Las operaciones tienen un plazo de 10
-segundos y no reintentan. Los secretos no se retornan ni registran. Las
-direcciones loopback, link-local, multicast, no especificadas y de metadata
-cloud permanecen bloqueadas aunque estén en la política.
+segundos y no reintentan. Los secretos no se retornan ni registran. Loopback se
+permite solo cuando `localhost` o una IP loopback literal aparece en una regla
+`host` exacta con el puerto solicitado; una regla CIDR no puede habilitarlo. Las
+direcciones link-local, multicast, no especificadas y de metadata cloud siguen
+bloqueadas. La política se carga una vez al iniciar; reiniciá Testkit después de
+editar el archivo.
 
 ## Kubernetes: fixture mínimo de transporte
 

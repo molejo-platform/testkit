@@ -422,8 +422,11 @@ process memory. Run fixed operations at
 
 The server limits retained connections to eight and concurrent diagnostic
 requests to four. Operations have a 10-second deadline and no retry. Secrets are
-not returned or logged. Loopback, link-local, multicast, unspecified, and cloud
-metadata addresses remain blocked even if listed in the policy.
+not returned or logged. Loopback is allowed only when `localhost` or a literal
+loopback IP appears as an exact `host` rule with the requested port; a CIDR rule
+cannot allow it. Link-local, multicast, unspecified, and cloud metadata
+addresses remain blocked. The policy is loaded once at startup, so restart
+Testkit after editing its file.
 
 ## Kubernetes: minimal transport fixture
 

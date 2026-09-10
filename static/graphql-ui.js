@@ -1,14 +1,11 @@
 import { createFiniteRequestExecutor } from "./finite-request.js";
+import { mountJSONCopyButtons, renderJSON, renderJSONText, renderText } from "./json-view.js";
 
 const presets = {
   status: { query: "{ status version }", expectsErrors: false },
   echo: { query: "query Echo($message: String!) { echo(message: $message) }", variables: { message: "hello from GraphQL" }, expectsErrors: false },
   invalid: { query: "query Invalid { missing }", expectsErrors: true },
 };
-
-function formatJSON(value) {
-  try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
-}
 
 export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = globalThis.fetch, now = () => globalThis.performance.now(), timeoutMS = 10_000 } = {}) {
   const buttons = [...root.querySelectorAll("[data-graphql-preset]")];
@@ -32,7 +29,7 @@ export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = gl
     return payload;
   }
   function clearResponse() {
-    responseOutput.textContent = translate("lab.run_to_see");
+    renderText(responseOutput, translate("lab.run_to_see"));
     status.className = "lab-result-status";
     status.textContent = translate("lab.waiting");
     status.setAttribute("role", "status");
@@ -50,7 +47,7 @@ export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = gl
       button.setAttribute("aria-pressed", String(selected));
     }
     requestLine.textContent = "POST /graphql";
-    requestOutput.textContent = JSON.stringify(payloadFor(preset), null, 2);
+    renderJSON(requestOutput, payloadFor(preset));
     clearResponse();
   }
   function setRunning(next) {
@@ -64,7 +61,7 @@ export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = gl
     if (running) return;
     const preset = presets[selectedName];
     setRunning(true);
-    responseOutput.textContent = translate("lab.running");
+    renderText(responseOutput, translate("lab.running"));
     status.className = "lab-result-status lab-result-status--running";
     status.textContent = translate("lab.running");
     hint.textContent = translate("graphql.running");
@@ -87,12 +84,12 @@ export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = gl
       const hasErrors = Array.isArray(parsed?.errors) && parsed.errors.length > 0;
       const passed = response.ok && (preset.expectsErrors ? hasErrors : !hasErrors);
       contentType.textContent = response.headers.get("content-type") || translate("lab.not_available");
-      responseOutput.textContent = formatJSON(body);
+      renderJSONText(responseOutput, body);
       status.className = `lab-result-status ${passed ? "lab-result-status--ok" : "lab-result-status--error"}`;
       status.textContent = passed && preset.expectsErrors ? translate("graphql.expected_error") : [response.status, response.statusText].filter(Boolean).join(" ");
       hint.textContent = passed ? translate("graphql.completed") : translate("graphql.failed");
     } catch (error) {
-      responseOutput.textContent = String(error);
+      renderText(responseOutput, error);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       status.setAttribute("role", "alert");
@@ -116,6 +113,7 @@ export function mountGraphQLLab(root, { translate = (key) => key, fetchImpl = gl
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); run(); }
   });
   output.setAttribute("aria-busy", "false");
+  mountJSONCopyButtons(root, { translate });
   select(selectedName);
 }
 

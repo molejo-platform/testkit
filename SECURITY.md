@@ -42,9 +42,10 @@ PostgreSQL diagnostics change the trust boundary and are disabled by default.
 Enabling them requires a deployment token from a read-only file and a read-only
 host/CIDR and port policy. Requests without valid authorization, from a foreign
 browser origin, or outside the policy are rejected before network access. The
-server resolves A/AAAA addresses for every attempt, rejects loopback, link-local,
-multicast and unspecified addresses, and dials only a validated address while
-retaining the original hostname for TLS verification.
+server resolves A/AAAA addresses for every attempt. Loopback requires an exact
+`host` and port rule and cannot be enabled by CIDR; link-local, multicast and
+unspecified addresses remain forbidden. The server dials only a validated
+address while retaining the original hostname for TLS verification.
 
 Assets at risk are typed database credentials, the workload network identity,
 reachable services, discovered metadata, and process availability. Required

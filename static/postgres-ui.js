@@ -1,4 +1,5 @@
 import { createFiniteRequestExecutor } from "./finite-request.js";
+import { mountJSONCopyButtons, renderJSON, renderText } from "./json-view.js";
 
 function safeSummary(values) {
   if (values.mode === "uri") {
@@ -38,6 +39,10 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
   const fields = root.querySelector("[data-postgres-fields]");
   const uriField = root.querySelector("[data-postgres-uri]");
   const credentialSecret = root.querySelector("[data-postgres-credential-secret]");
+  const credentialSecretInput = form.elements.namedItem("credential_secret");
+  const credentialSecretToggle = root.querySelector("[data-postgres-toggle-secret]");
+  const passwordIconShow = credentialSecretToggle.querySelector("[data-password-icon-show]");
+  const passwordIconHide = credentialSecretToggle.querySelector("[data-password-icon-hide]");
   const caField = root.querySelector("[data-postgres-ca]");
   const operationButtons = [...root.querySelectorAll("[data-postgres-operation]")];
   const connectionControls = [...root.querySelectorAll("[data-postgres-connection-control]")];
@@ -55,6 +60,13 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
 
   function values() { return Object.fromEntries(new FormData(form).entries()); }
   function isRetained() { return values().lifecycle === "retained"; }
+  function setCredentialSecretVisible(visible) {
+    credentialSecretInput.type = visible ? "text" : "password";
+    credentialSecretToggle.setAttribute("aria-pressed", String(visible));
+    credentialSecretToggle.setAttribute("aria-label", visible ? credentialSecretToggle.dataset.labelHide : credentialSecretToggle.dataset.labelShow);
+    passwordIconShow.hidden = visible;
+    passwordIconHide.hidden = !visible;
+  }
   function setRunning(next) {
     running = next;
     output.setAttribute("aria-busy", String(next));
@@ -69,7 +81,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
   function resetResult() {
     status.className = "lab-result-status";
     status.textContent = translate("lab.waiting");
-    responseOutput.textContent = translate("lab.run_to_see");
+    renderText(responseOutput, translate("lab.run_to_see"));
     summary.textContent = safeSummary(values());
   }
   function updateVisibility(reset = true) {
@@ -83,7 +95,10 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     uriField.hidden = !useURI;
     credentialSecret.hidden = useURI || current.credential_type === "none";
     caField.hidden = tlsMode === "disable";
-    if (credentialSecret.hidden) form.elements.namedItem("credential_secret").value = "";
+    if (credentialSecret.hidden) {
+      credentialSecretInput.value = "";
+      setCredentialSecretVisible(false);
+    }
     if (!useURI) form.elements.namedItem("uri").value = "";
     if (caField.hidden) form.elements.namedItem("ca_pem").value = "";
     createButton.hidden = current.lifecycle !== "retained" || Boolean(connectionID);
@@ -98,7 +113,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     const passed = response.ok && result.status === "success";
     status.className = `lab-result-status ${passed ? "lab-result-status--ok" : "lab-result-status--error"}`;
     status.textContent = result.code || body.code || `${response.status}`;
-    responseOutput.textContent = JSON.stringify(body, null, 2);
+    renderJSON(responseOutput, body);
   }
   async function execute(path, options) {
     const execution = await executor.execute(path, options);
@@ -106,7 +121,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     if (execution.aborted) {
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate(`lab.${execution.reason}`);
-      responseOutput.textContent = translate(`postgres.${execution.reason}`);
+      renderText(responseOutput, translate(`postgres.${execution.reason}`));
       return null;
     }
     return execution.response;
@@ -117,7 +132,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     summary.textContent = safeSummary(current);
     status.className = "lab-result-status lab-result-status--running";
     status.textContent = translate("lab.running");
-    responseOutput.textContent = translate("lab.running");
+    renderText(responseOutput, translate("lab.running"));
     try {
       const path = connectionID ? `/api/diagnostics/postgres/connections/${connectionID}/operations` : "/api/diagnostics/postgres";
       const body = connectionID ? { operation } : { operation, connection: postgresConnectionPayload(current) };
@@ -127,7 +142,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     } catch {
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
-      responseOutput.textContent = translate("postgres.network_failed");
+      renderText(responseOutput, translate("postgres.network_failed"));
     } finally { setRunning(false); }
   }
   async function createConnection() {
@@ -144,7 +159,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     } catch {
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
-      responseOutput.textContent = translate("postgres.network_failed");
+      renderText(responseOutput, translate("postgres.network_failed"));
     } finally { setRunning(false); updateVisibility(false); }
   }
   async function destroyConnection() {
@@ -157,7 +172,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
         connectionID = null;
         status.className = "lab-result-status lab-result-status--ok";
         status.textContent = translate("postgres.destroyed");
-        responseOutput.textContent = translate("postgres.destroyed_detail");
+        renderText(responseOutput, translate("postgres.destroyed_detail"));
       }
     } finally { setRunning(false); updateVisibility(false); }
   }
@@ -182,17 +197,19 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
 
   for (const radio of root.querySelectorAll('input[name="mode"]')) radio.addEventListener("change", updateVisibility);
   for (const button of operationButtons) button.addEventListener("click", () => run(button.dataset.postgresOperation));
+  credentialSecretToggle.addEventListener("click", () => setCredentialSecretVisible(credentialSecretInput.type === "password"));
   form.addEventListener("input", updateVisibility);
   cancelButton.addEventListener("click", () => {
     executor.cancel();
     setRunning(false);
     status.className = "lab-result-status lab-result-status--error";
     status.textContent = translate("lab.cancelled");
-    responseOutput.textContent = translate("postgres.cancelled");
+    renderText(responseOutput, translate("postgres.cancelled"));
   });
   createButton.addEventListener("click", createConnection);
   destroyButton.addEventListener("click", destroyConnection);
-  clearButton.addEventListener("click", async () => { if (connectionID) await destroyConnection(); form.reset(); connectionID = null; updateVisibility(); });
+  clearButton.addEventListener("click", async () => { if (connectionID) await destroyConnection(); form.reset(); connectionID = null; setCredentialSecretVisible(false); updateVisibility(); });
+  mountJSONCopyButtons(root, { translate });
   updateVisibility();
   void applyCapabilities();
 }

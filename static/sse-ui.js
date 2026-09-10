@@ -1,14 +1,7 @@
 import { createCorrelationID } from "./correlation-id.js";
+import { renderJSONText } from "./json-view.js";
 
 const MAX_EVENTS = 50;
-
-function formatData(data) {
-  try {
-    return JSON.stringify(JSON.parse(data), null, 2);
-  } catch {
-    return data;
-  }
-}
 
 export function mountSSELab(root, {
   locale = "en",
@@ -53,7 +46,7 @@ export function mountSSELab(root, {
     meta.append(time, type);
     const payload = document.createElement("code");
     payload.className = "event-log__payload";
-    payload.textContent = formatData(event.data || "");
+    renderJSONText(payload, event.data || "");
     entry.append(meta, payload);
     list.append(entry);
     while (list.children.length > MAX_EVENTS + 1) list.removeChild(list.children[1]);

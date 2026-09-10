@@ -12,7 +12,7 @@ class FakeElement {
     this.hidden = false;
     this.scrollHeight = 0;
     this.scrollTop = 0;
-    this.textContent = "";
+    this._textContent = "";
     this.value = "";
   }
 
@@ -29,6 +29,7 @@ class FakeElement {
   }
 
   append(...children) {
+    this._textContent = "";
     this.children.push(...children);
   }
 
@@ -39,7 +40,19 @@ class FakeElement {
   }
 
   replaceChildren(...children) {
+    this._textContent = "";
     this.children = children;
+  }
+
+  get textContent() {
+    return this.children.length > 0
+      ? this.children.map((child) => child.textContent).join("")
+      : this._textContent;
+  }
+
+  set textContent(value) {
+    this._textContent = String(value);
+    this.children = [];
   }
 
   querySelector(selector) {
