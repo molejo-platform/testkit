@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "test:frontend": "node --test frontend-tests/correlation-id.test.mjs frontend-tests/i18n.test.mjs frontend-tests/labs-ui.test.mjs frontend-tests/ws-client.test.mjs frontend-tests/ws-ui.test.mjs"

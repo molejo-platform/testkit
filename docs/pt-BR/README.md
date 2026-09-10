@@ -95,7 +95,7 @@ curl --fail http://localhost:8080/api/status
 Resposta esperada:
 
 ```json
-{"status":"ok","version":"v0.7.1"}
+{"status":"ok","version":"v0.8.0"}
 ```
 
 Para executar o servidor em outra porta, defina `HTTP_PORT`. O padrão é `8080`:
@@ -183,7 +183,7 @@ conectados para tornar o resultado de transporte visível; isso não testa rooms
 autenticação nem roteamento no nível da aplicação.
 
 ```json
-{"message":"hello","version":"v0.7.1"}
+{"message":"hello","version":"v0.8.0"}
 ```
 
 ## Probe de rede
@@ -350,7 +350,7 @@ Releases versionadas publicam imagens multiplataforma no GitHub Container
 Registry:
 
 ```text
-ghcr.io/molejo-platform/testkit:v0.7.1
+ghcr.io/molejo-platform/testkit:v0.8.0
 ```
 
 As tags existem para descoberta. Testes automatizados devem consumir o digest

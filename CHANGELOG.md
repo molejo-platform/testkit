@@ -7,10 +7,21 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+No changes yet.
+
+## [0.8.0] - 2026-09-10
+
+### Added
+
+- Added an optional persistent marker fixture, configured through
+  `TESTKIT_PERSISTENCE_FILE`, for storage connectivity smoke tests.
+
 ### Changed
 
-- Completed the Molejo rebrand across localized browser copy, the Go module path,
-  probe User-Agent, official logo asset, dark palette, and typography.
+- Completed the Molejo rebrand across localized browser copy, the probe
+  User-Agent, official logo asset, dark palette, and typography.
+- Changed the Go module path from `github.com/fruto-platform/testkit` to
+  `github.com/molejo-platform/testkit`; Go consumers must update their imports.
 - Added the local branding contract so future browser changes preserve the
   approved Molejo assets and semantic color roles.
 - The HTTP server keeps port `8080` as its default and now accepts a validated
@@ -165,7 +176,8 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Initial multi-platform image publication workflow for GitHub Container Registry.
 
-[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/molejo-platform/testkit/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/molejo-platform/testkit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/molejo-platform/testkit/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/molejo-platform/testkit/compare/v0.6.0...v0.6.1

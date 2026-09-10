@@ -95,7 +95,7 @@ curl --fail http://localhost:8080/api/status
 Expected response:
 
 ```json
-{"status":"ok","version":"v0.7.1"}
+{"status":"ok","version":"v0.8.0"}
 ```
 
 To run the server on another port, set `HTTP_PORT`. It defaults to `8080`:
@@ -181,7 +181,7 @@ the transport result is visible; this is not a test of rooms, authentication,
 or application-level routing.
 
 ```json
-{"message":"hello","version":"v0.7.1"}
+{"message":"hello","version":"v0.8.0"}
 ```
 
 ## Network probe
@@ -344,7 +344,7 @@ by server shutdown do not replace the last observed peer state.
 Tagged releases publish multi-platform images to GitHub Container Registry:
 
 ```text
-ghcr.io/molejo-platform/testkit:v0.7.1
+ghcr.io/molejo-platform/testkit:v0.8.0
 ```
 
 Tags are provided for discovery. Automated tests should consume the immutable
