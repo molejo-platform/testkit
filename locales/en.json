@@ -12,6 +12,7 @@
   "error.send_empty": "Enter a message before sending.",
   "footer.fixture": "Same-origin browser fixture",
   "footer.name": "Molejo Testkit",
+  "footer.powered_by": "Powered by Molejo",
   "home.active": "active",
   "home.coming_soon": "Coming soon",
   "home.eyebrow": "Protocol lab / 01",

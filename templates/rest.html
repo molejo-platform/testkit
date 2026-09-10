@@ -71,10 +71,6 @@
     </div>
   </section>
 
-  <footer class="page-footer">
-    <span>{{ .T "footer.name" }}</span>
-    <span class="footer-separator" aria-hidden="true">/</span>
-    <span>{{ .T "footer.fixture" }} · {{ .T "build.label" }} {{ .Version }}</span>
-  </footer>
+  {{ template "page-footer" . }}
 </main>
 {{- end }}

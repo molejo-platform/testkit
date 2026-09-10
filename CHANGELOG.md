@@ -15,6 +15,8 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   approved Molejo assets and semantic color roles.
 - The HTTP server keeps port `8080` as its default and now accepts a validated
   `HTTP_PORT` environment variable for local and containerized runs.
+- Added a localized footer attribution link to `molejo.dev` with build-version
+  UTM tracking and responsive link styling.
 
 ## [0.7.1] - 2026-08-29
 

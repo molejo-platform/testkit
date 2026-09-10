@@ -865,14 +865,14 @@ func TestProtocolLabPagesRenderLocalizedContracts(t *testing.T) {
 	}
 }
 
-func TestGraphQLLabFooterHasSingleSeparator(t *testing.T) {
+func TestGraphQLLabFooterHasExpectedSeparators(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/en/graphql-lab", nil)
 	responseRecorder := httptest.NewRecorder()
 
 	newHandler().ServeHTTP(responseRecorder, request)
 
-	if got := strings.Count(responseRecorder.Body.String(), `<span class="footer-separator" aria-hidden="true">/</span>`); got != 1 {
-		t.Fatalf("GraphQL lab footer separators = %d, want 1", got)
+	if got := strings.Count(responseRecorder.Body.String(), `<span class="footer-separator" aria-hidden="true">/</span>`); got != 2 {
+		t.Fatalf("GraphQL lab footer separators = %d, want 2", got)
 	}
 }
 
@@ -894,6 +894,31 @@ func TestPageFootersIncludeVersion(t *testing.T) {
 			footer := body[footerStart : footerStart+footerEnd]
 			if want := "Same-origin browser fixture · build " + version; !strings.Contains(footer, want) {
 				t.Fatalf("page footer does not contain %q", want)
+			}
+		})
+	}
+}
+
+func TestPageFootersLinkToMolejoWithBuildAttribution(t *testing.T) {
+	for _, test := range []struct {
+		path  string
+		label string
+	}{
+		{path: "/en/", label: "Powered by Molejo"},
+		{path: "/pt-BR/", label: "Desenvolvido por Molejo"},
+		{path: "/es-AR/", label: "Desarrollado por Molejo"},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			responseRecorder := httptest.NewRecorder()
+			newHandler().ServeHTTP(responseRecorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+
+			body := responseRecorder.Body.String()
+			if !strings.Contains(body, test.label) {
+				t.Fatalf("page footer does not contain %q", test.label)
+			}
+			wantURL := `href="https://molejo.dev/?utm_campaign=testkit&amp;utm_content=footer-build-` + version + `&amp;utm_medium=referral&amp;utm_source=molejo-testkit"`
+			if !strings.Contains(body, wantURL) {
+				t.Fatalf("page footer does not contain %q", wantURL)
 			}
 		})
 	}

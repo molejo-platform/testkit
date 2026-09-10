@@ -86,6 +86,7 @@ type pageData struct {
 	TranslationsJSON   string
 	Languages          []languageOption
 	HomeURL            string
+	MolejoURL          string
 	LabEndpoint        string
 	Protocols          []protocolCardView
 	Clients            []webSocketClientView
@@ -672,11 +673,22 @@ func localizedProtocolCards(currentLocale locale) []protocolCardView {
 func localizedPageData(currentLocale locale, page string, data pageData) pageData {
 	data.Locale = string(currentLocale)
 	data.StaticAssetVersion = staticAssetVersion
+	data.MolejoURL = molejoFooterURL(data.Version)
 	data.Texts = pageTranslationCatalog.translations(currentLocale)
 	data.TranslationsJSON = pageTranslationCatalog.translationsJSON(currentLocale)
 	data.Languages = languageOptions(currentLocale, page)
 	data.HomeURL = localizedPath(currentLocale, "/")
 	return data
+}
+
+func molejoFooterURL(buildVersion string) string {
+	query := url.Values{
+		"utm_campaign": {"testkit"},
+		"utm_content":  {"footer-build-" + buildVersion},
+		"utm_medium":   {"referral"},
+		"utm_source":   {"molejo-testkit"},
+	}
+	return "https://molejo.dev/?" + query.Encode()
 }
 
 func languageOptions(currentLocale locale, page string) []languageOption {

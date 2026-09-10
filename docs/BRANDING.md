@@ -21,6 +21,19 @@ Use the logo on the dark Testkit surface with alternative text `Molejo`. Keep
 surface, add and use the corresponding official `on-light` variant rather than
 recreating the mark in CSS.
 
+## Attribution link
+
+Every browser page includes a small localized footer link to `https://molejo.dev/`
+with the label `Powered by Molejo`, `Desenvolvido por Molejo`, or `Desarrollado
+por Molejo`. The link opens in the same tab and must not load external assets or
+make a request before the user activates it.
+
+Its URL uses stable UTM dimensions for the product and placement, while including
+the embedded build version in the content dimension:
+
+`utm_source=molejo-testkit`, `utm_medium=referral`, `utm_campaign=testkit`, and
+`utm_content=footer-build-<version>`.
+
 ## Color
 
 `static/style.css` keeps the dark layout but consumes these Molejo brand
