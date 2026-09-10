@@ -166,6 +166,7 @@ type diagnosticService struct {
 	policy     *destinationPolicy
 	logger     *slog.Logger
 	executor   postgresDiagnosticExecutor
+	registry   *postgresConnectionRegistry
 	semaphore  chan struct{}
 	rateMutex  sync.Mutex
 	rateWindow time.Time
@@ -182,7 +183,9 @@ func newDiagnosticService(token []byte, policy *destinationPolicy, logger *slog.
 		logger:    logger,
 		semaphore: make(chan struct{}, diagnosticConcurrency),
 	}
-	service.executor = &postgresExecutor{}
+	executor := &postgresExecutor{}
+	service.executor = executor
+	service.registry = newPostgresConnectionRegistry(executor)
 	return service
 }
 
@@ -190,6 +193,18 @@ func (service *diagnosticService) handler(writer http.ResponseWriter, request *h
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 	writer.Header().Set("X-Frame-Options", "DENY")
+	if request.URL.Path == "/api/diagnostics/postgres/capabilities" {
+		service.capabilitiesHandler(writer, request)
+		return
+	}
+	if request.URL.Path == "/api/diagnostics/postgres/connections" {
+		service.connectionsHandler(writer, request)
+		return
+	}
+	if strings.HasPrefix(request.URL.Path, "/api/diagnostics/postgres/connections/") {
+		service.connectionHandler(writer, request)
+		return
+	}
 	if request.URL.Path != "/api/diagnostics/postgres" {
 		http.NotFound(writer, request)
 		return
@@ -233,8 +248,12 @@ func (service *diagnosticService) handler(writer http.ResponseWriter, request *h
 		writeJSON(writer, http.StatusBadRequest, diagnosticError{Code: err.Error()})
 		return
 	}
+	if resolved.Lifecycle.Mode != "ephemeral" {
+		writeJSON(writer, http.StatusBadRequest, diagnosticError{Code: "retained_connection_requires_creation"})
+		return
+	}
 	validationContext, cancelValidation := context.WithTimeout(request.Context(), 5*time.Second)
-	target, err := service.policy.validate(validationContext, resolved.Host, resolved.Port)
+	target, err := service.policy.validate(validationContext, resolved.Target.Host, resolved.Target.Port)
 	cancelValidation()
 	if err != nil {
 		writeJSON(writer, http.StatusForbidden, diagnosticError{Code: err.Error()})
@@ -255,6 +274,233 @@ func (service *diagnosticService) handler(writer http.ResponseWriter, request *h
 		"status", result.Status, "code", result.Code, "duration_ms", result.DurationMS, "check_id", result.CheckID)
 	writer.Header().Set(correlationHeader, result.CheckID)
 	writeJSON(writer, http.StatusOK, result)
+}
+
+type postgresCapabilities struct {
+	SchemaVersion    int      `json:"schema_version"`
+	ConnectionModes  []string `json:"connection_modes"`
+	CredentialTypes  []string `json:"credential_types"`
+	TLSModes         []string `json:"tls_modes"`
+	LifecycleModes   []string `json:"lifecycle_modes"`
+	Operations       []string `json:"operations"`
+	DatabaseRequired bool     `json:"database_required"`
+	DefaultPort      uint16   `json:"default_port"`
+	DefaultTLSMode   string   `json:"default_tls_mode"`
+	DefaultLifecycle string   `json:"default_lifecycle"`
+	MaxRetained      int      `json:"max_retained_connections"`
+}
+
+type postgresConnectionCreateRequest struct {
+	Connection postgresConnectionInput `json:"connection"`
+}
+
+type postgresOperationRequest struct {
+	Operation string `json:"operation"`
+}
+
+type postgresConnectionCreateResponse struct {
+	Connection postgresConnectionView `json:"connection,omitempty"`
+	Result     diagnosticResult       `json:"result"`
+}
+
+func (service *diagnosticService) capabilitiesHandler(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		writer.Header().Set("Allow", http.MethodGet)
+		writeJSON(writer, http.StatusMethodNotAllowed, diagnosticError{Code: "method_not_allowed"})
+		return
+	}
+	if !sameRequestOrigin(request) {
+		writeJSON(writer, http.StatusForbidden, diagnosticError{Code: "origin_not_allowed"})
+		return
+	}
+	writeJSON(writer, http.StatusOK, postgresCapabilities{
+		SchemaVersion: 1, ConnectionModes: []string{"structured", "uri"},
+		CredentialTypes: []string{"password", "token", "none"}, TLSModes: []string{"verify-full", "disable"},
+		LifecycleModes: []string{"ephemeral", "retained"}, Operations: []string{"connect", "arithmetic_check", "list_databases", "list_schemas"},
+		DatabaseRequired: false, DefaultPort: postgresDefaultPort, DefaultTLSMode: "verify-full", DefaultLifecycle: "ephemeral",
+		MaxRetained: postgresMaxRetainedConnections,
+	})
+}
+
+func (service *diagnosticService) connectionsHandler(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		writer.Header().Set("Allow", http.MethodPost)
+		writeJSON(writer, http.StatusMethodNotAllowed, diagnosticError{Code: "method_not_allowed"})
+		return
+	}
+	if !service.prepareProtectedRequest(writer, request) {
+		return
+	}
+	if !service.acquireCapacity(writer) {
+		return
+	}
+	defer service.releaseCapacity()
+	var input postgresConnectionCreateRequest
+	if err := decodeStrictRequestJSON(writer, request, maxDiagnosticBodyBytes, &input); err != nil {
+		return
+	}
+	resolved, err := input.Connection.resolve()
+	if err != nil {
+		writeJSON(writer, http.StatusBadRequest, diagnosticError{Code: err.Error()})
+		return
+	}
+	if resolved.Lifecycle.Mode != "retained" {
+		writeJSON(writer, http.StatusBadRequest, diagnosticError{Code: "retained_lifecycle_required"})
+		return
+	}
+	target, ok := service.validatePostgresTarget(writer, request, resolved)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(request.Context(), diagnosticTimeout)
+	defer cancel()
+	started := time.Now()
+	view, result, err := service.registry.Create(ctx, resolved, target)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err.Error() == "connection_capacity_exceeded" {
+			status = http.StatusTooManyRequests
+		} else if err.Error() == "connection_registry_closed" {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(writer, status, diagnosticError{Code: err.Error()})
+		return
+	}
+	service.completeResult(request, &result, "connect", started)
+	writer.Header().Set(correlationHeader, result.CheckID)
+	status := http.StatusCreated
+	if result.Status != "success" {
+		status = http.StatusOK
+	}
+	writeJSON(writer, status, postgresConnectionCreateResponse{Connection: view, Result: result})
+}
+
+func (service *diagnosticService) connectionHandler(writer http.ResponseWriter, request *http.Request) {
+	if !service.prepareProtectedRequest(writer, request) {
+		return
+	}
+	if !service.acquireCapacity(writer) {
+		return
+	}
+	defer service.releaseCapacity()
+	remainder := strings.TrimPrefix(request.URL.Path, "/api/diagnostics/postgres/connections/")
+	parts := strings.Split(remainder, "/")
+	if len(parts) == 1 && parts[0] != "" {
+		switch request.Method {
+		case http.MethodGet:
+			view, ok := service.registry.Get(parts[0])
+			if !ok {
+				writeJSON(writer, http.StatusNotFound, diagnosticError{Code: "connection_not_found"})
+				return
+			}
+			writeJSON(writer, http.StatusOK, view)
+		case http.MethodDelete:
+			ctx, cancel := context.WithTimeout(request.Context(), diagnosticTimeout)
+			defer cancel()
+			if !service.registry.Delete(ctx, parts[0]) {
+				writeJSON(writer, http.StatusNotFound, diagnosticError{Code: "connection_not_found"})
+				return
+			}
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			writer.Header().Set("Allow", http.MethodGet+", "+http.MethodDelete)
+			writeJSON(writer, http.StatusMethodNotAllowed, diagnosticError{Code: "method_not_allowed"})
+		}
+		return
+	}
+	if len(parts) == 2 && parts[0] != "" && parts[1] == "operations" && request.Method == http.MethodPost {
+		var input postgresOperationRequest
+		if err := decodeStrictRequestJSON(writer, request, maxDiagnosticBodyBytes, &input); err != nil {
+			return
+		}
+		if !supportedPostgresOperation(input.Operation) {
+			writeJSON(writer, http.StatusBadRequest, diagnosticError{Code: "unsupported_operation"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(request.Context(), diagnosticTimeout)
+		defer cancel()
+		started := time.Now()
+		result, ok := service.registry.Execute(ctx, parts[0], input.Operation)
+		if !ok {
+			writeJSON(writer, http.StatusNotFound, diagnosticError{Code: "connection_not_found"})
+			return
+		}
+		service.completeResult(request, &result, input.Operation, started)
+		writer.Header().Set(correlationHeader, result.CheckID)
+		writeJSON(writer, http.StatusOK, result)
+		return
+	}
+	http.NotFound(writer, request)
+}
+
+func (service *diagnosticService) prepareProtectedRequest(writer http.ResponseWriter, request *http.Request) bool {
+	if request.Method == http.MethodPost && strings.TrimSpace(strings.Split(request.Header.Get("Content-Type"), ";")[0]) != "application/json" {
+		writeJSON(writer, http.StatusUnsupportedMediaType, diagnosticError{Code: "content_type_required"})
+		return false
+	}
+	if !sameRequestOrigin(request) {
+		writeJSON(writer, http.StatusForbidden, diagnosticError{Code: "origin_not_allowed"})
+		return false
+	}
+	if !service.authorized(request.Header.Get(diagnosticAuthHeader)) {
+		writeJSON(writer, http.StatusUnauthorized, diagnosticError{Code: "unauthorized"})
+		return false
+	}
+	if !service.allowRate(time.Now()) {
+		writer.Header().Set("Retry-After", "60")
+		writeJSON(writer, http.StatusTooManyRequests, diagnosticError{Code: "rate_limited"})
+		return false
+	}
+	return true
+}
+
+func (service *diagnosticService) acquireCapacity(writer http.ResponseWriter) bool {
+	select {
+	case service.semaphore <- struct{}{}:
+		return true
+	default:
+		writeJSON(writer, http.StatusTooManyRequests, diagnosticError{Code: "capacity_exceeded"})
+		return false
+	}
+}
+
+func (service *diagnosticService) releaseCapacity() {
+	<-service.semaphore
+}
+
+func (service *diagnosticService) validatePostgresTarget(writer http.ResponseWriter, request *http.Request, resolved postgresConnection) (validatedTarget, bool) {
+	ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	defer cancel()
+	target, err := service.policy.validate(ctx, resolved.Target.Host, resolved.Target.Port)
+	if err != nil {
+		writeJSON(writer, http.StatusForbidden, diagnosticError{Code: err.Error()})
+		return validatedTarget{}, false
+	}
+	return target, true
+}
+
+func (service *diagnosticService) completeResult(request *http.Request, result *diagnosticResult, operation string, started time.Time) {
+	result.SchemaVersion = 1
+	result.CheckID = resolveCorrelationID(request.Header.Get(correlationHeader))
+	result.Provider = "postgres"
+	result.Operation = operation
+	result.DurationMS = durationMilliseconds(time.Since(started))
+	service.logger.InfoContext(request.Context(), "diagnostic completed",
+		"event", "diagnostic.completed", "provider", result.Provider, "operation", result.Operation,
+		"status", result.Status, "code", result.Code, "duration_ms", result.DurationMS, "check_id", result.CheckID)
+}
+
+func supportedPostgresOperation(operation string) bool {
+	switch operation {
+	case "connect", "arithmetic_check", "list_databases", "list_schemas":
+		return true
+	default:
+		return false
+	}
+}
+
+func (service *diagnosticService) Close(ctx context.Context) {
+	service.registry.CloseAll(ctx)
 }
 
 func (service *diagnosticService) authorized(value string) bool {

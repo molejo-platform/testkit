@@ -57,6 +57,7 @@ globalThis.document = {
 const { mountRestLab, restPresets } = await import("../static/rest-ui.js");
 const { mountGraphQLLab, graphQLPresets } = await import("../static/graphql-ui.js");
 const { mountSSELab } = await import("../static/sse-ui.js");
+const { postgresConnectionPayload } = await import("../static/postgres-ui.js");
 
 const browserCorrelationID = "018f47de-1234-7abc-8def-0123456789ab";
 
@@ -70,6 +71,34 @@ function rootFor(selectors, collections = {}) {
 function labTranslator(key) {
   return key;
 }
+
+test("PostgreSQL payload separates destination identity credential database TLS and lifecycle", () => {
+  const payload = postgresConnectionPayload({
+    mode: "fields", host: "db.example", port: "5433", user: "operator",
+    credential_type: "token", credential_secret: "sentinel-secret", database: "",
+    tls: "verify-full", ca_pem: "certificate", lifecycle: "retained",
+  });
+
+  assert.deepEqual(payload, {
+    target: { host: "db.example", port: 5433 },
+    database: undefined,
+    identity: { user: "operator" },
+    credential: { type: "token", secret: "sentinel-secret" },
+    tls_config: { mode: "verify-full", ca_pem: "certificate" },
+    lifecycle: { mode: "retained" },
+  });
+  assert.equal(JSON.stringify(payload).includes("password"), false);
+});
+
+test("PostgreSQL URI remains an explicit alternative and keeps lifecycle separate", () => {
+  assert.deepEqual(postgresConnectionPayload({
+    mode: "uri", uri: "postgresql://operator@db.example/app", ca_pem: "certificate", lifecycle: "ephemeral",
+  }), {
+    uri: "postgresql://operator@db.example/app",
+    tls_config: { ca_pem: "certificate" },
+    lifecycle: { mode: "ephemeral" },
+  });
+});
 
 function createHTTPRoot(prefix, names = ["status", "items", "echo", "invalid"]) {
   const buttons = names.map((name) => {

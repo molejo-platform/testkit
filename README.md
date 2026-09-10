@@ -301,12 +301,23 @@ strict JSON, for example:
 {"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
 ```
 
-The browser sends the deployment token in `Authorization: Bearer ...` and keeps
-the token and database credentials only in page memory. The API exposes only
-`connect`, `arithmetic_check`, `list_databases`, and `list_schemas`; it accepts no
-SQL. Every operation uses a new connection, a 10-second total deadline, no retry,
-and at most four concurrent executions per process. URI and separate-field modes
-are mutually exclusive. TLS defaults to `verify-full`; disabling it is explicit.
+The browser sends the deployment token in `Authorization: Bearer ...`; this API
+token is separate from the PostgreSQL credential. The structured connection
+contract separates `target`, optional `database`, `identity`, `credential`,
+`tls_config`, and `lifecycle`. Credential types are `password`, `token`, and
+`none`; the first two require `secret`, while `none` forbids it. When `database`
+is omitted, PostgreSQL selects the database according to its own startup rules.
+The capabilities endpoint publishes these enums and defaults for the browser.
+
+The API exposes only `connect`, `arithmetic_check`, `list_databases`, and
+`list_schemas`; it accepts no SQL. Ephemeral operations open and close one
+connection. Retained connections are created under
+`/api/diagnostics/postgres/connections`, kept only in process memory, serialized
+per connection, and explicitly destroyed or closed during shutdown. There are at
+most eight retained connections and four concurrent diagnostic requests per
+process. Every request has a 10-second total deadline and no retry. URI and
+structured modes are mutually exclusive. TLS defaults to `verify-full`;
+disabling it is explicit.
 The API rejects unknown URI parameters, loopback, link-local (including
 cloud/container metadata), multicast, and unspecified addresses before
 connecting. Private destinations remain available only when the deployment
@@ -381,17 +392,17 @@ provenance attestations are outside the current release contract.
 
 ## Development
 
-Run the local quality gate:
+Run the essential local gate, which needs no Docker or external service:
 
 ```sh
-gofmt -w *.go
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
 npm ci
-npm run test:frontend
-npm run test:browser
+make test-local
 ```
+
+Use `make test-browser` for browser contracts, `make test-postgres` for a
+disposable real PostgreSQL 18 instance, and `make test-full` for all three
+layers. The PostgreSQL integration tests carry the `integration` build tag and
+fail, rather than skip, when their DSN is missing.
 
 Build and exercise the final container whenever runtime, embedded assets, probes,
 or the Dockerfile changes.

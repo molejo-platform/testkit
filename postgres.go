@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/url"
@@ -16,10 +17,9 @@ import (
 )
 
 const (
-	postgresDefaultPort     = 5432
-	postgresDefaultDatabase = "postgres"
-	postgresMaxItems        = 100
-	postgresMaxCAPEMBytes   = 64 * 1024
+	postgresDefaultPort   = 5432
+	postgresMaxItems      = 100
+	postgresMaxCAPEMBytes = 64 * 1024
 )
 
 type postgresDiagnosticRequest struct {
@@ -29,25 +29,90 @@ type postgresDiagnosticRequest struct {
 }
 
 type postgresConnectionInput struct {
-	URI      string `json:"uri,omitempty"`
+	URI        string                   `json:"uri,omitempty"`
+	Target     *postgresTargetInput     `json:"target,omitempty"`
+	Database   *postgresDatabaseInput   `json:"database,omitempty"`
+	Identity   *postgresIdentityInput   `json:"identity,omitempty"`
+	Credential *postgresCredentialInput `json:"credential,omitempty"`
+	TLSConfig  *postgresTLSInput        `json:"tls_config,omitempty"`
+	Lifecycle  *postgresLifecycleInput  `json:"lifecycle,omitempty"`
+
+	// Deprecated flat fields are accepted temporarily for API compatibility.
 	Host     string `json:"host,omitempty"`
 	Port     uint16 `json:"port,omitempty"`
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
-	Database string `json:"database,omitempty"`
 	TLS      string `json:"tls,omitempty"`
 	CAPEM    string `json:"ca_pem,omitempty"`
 }
 
-type postgresConnection struct {
-	Host     string
-	Port     uint16
-	User     string
-	Password string
-	Database string
-	TLS      string
-	CAPEM    string
+type postgresTargetInput struct {
+	Host string `json:"host"`
+	Port uint16 `json:"port,omitempty"`
 }
+
+type postgresDatabaseInput struct {
+	Name string `json:"name"`
+}
+
+func (input *postgresDatabaseInput) UnmarshalJSON(data []byte) error {
+	var legacy string
+	if err := json.Unmarshal(data, &legacy); err == nil {
+		input.Name = legacy
+		return nil
+	}
+	type databaseInput postgresDatabaseInput
+	var decoded databaseInput
+	if err := decodeStrictJSON(data, &decoded); err != nil {
+		return err
+	}
+	*input = postgresDatabaseInput(decoded)
+	return nil
+}
+
+type postgresIdentityInput struct {
+	User string `json:"user"`
+}
+
+type postgresCredentialInput struct {
+	Type   string `json:"type"`
+	Secret string `json:"secret,omitempty"`
+}
+
+type postgresTLSInput struct {
+	Mode  string `json:"mode,omitempty"`
+	CAPEM string `json:"ca_pem,omitempty"`
+}
+
+type postgresLifecycleInput struct {
+	Mode string `json:"mode,omitempty"`
+}
+
+type postgresConnection struct {
+	Target     postgresTarget
+	Database   postgresDatabase
+	Identity   postgresIdentity
+	Credential postgresCredential
+	TLS        postgresTLS
+	Lifecycle  postgresLifecycle
+}
+
+type postgresTarget struct {
+	Host string
+	Port uint16
+}
+
+type postgresDatabase struct{ Name string }
+type postgresIdentity struct{ User string }
+type postgresCredential struct {
+	Type   string
+	Secret string
+}
+type postgresTLS struct {
+	Mode  string
+	CAPEM string
+}
+type postgresLifecycle struct{ Mode string }
 
 func (request postgresDiagnosticRequest) resolve() (postgresConnection, error) {
 	switch request.Operation {
@@ -55,36 +120,96 @@ func (request postgresDiagnosticRequest) resolve() (postgresConnection, error) {
 	default:
 		return postgresConnection{}, errors.New("unsupported_operation")
 	}
-	input := request.Connection
-	if len(input.CAPEM) > postgresMaxCAPEMBytes {
+	return request.Connection.resolve()
+}
+
+func (input postgresConnectionInput) resolve() (postgresConnection, error) {
+	caPEM := input.CAPEM
+	if input.TLSConfig != nil {
+		caPEM = input.TLSConfig.CAPEM
+	}
+	if len(caPEM) > postgresMaxCAPEMBytes {
 		return postgresConnection{}, errors.New("ca_too_large")
 	}
 	if strings.TrimSpace(input.URI) != "" {
-		if input.Host != "" || input.Port != 0 || input.User != "" || input.Password != "" || input.Database != "" || input.TLS != "" {
+		if input.Target != nil || input.Database != nil || input.Identity != nil || input.Credential != nil || input.Host != "" || input.Port != 0 || input.User != "" || input.Password != "" || input.TLS != "" {
 			return postgresConnection{}, errors.New("connection_modes_conflict")
 		}
-		return resolvePostgresURI(input.URI, input.CAPEM)
+		if input.TLSConfig != nil && input.TLSConfig.Mode != "" {
+			return postgresConnection{}, errors.New("uri_tls_mode_conflict")
+		}
+		lifecycle := "ephemeral"
+		if input.Lifecycle != nil && input.Lifecycle.Mode != "" {
+			lifecycle = input.Lifecycle.Mode
+		}
+		return resolvePostgresURI(input.URI, caPEM, lifecycle)
+	}
+	if input.hasStructuredFields() && input.hasFlatFields() {
+		return postgresConnection{}, errors.New("connection_modes_conflict")
+	}
+	if input.hasFlatFields() {
+		return resolveLegacyPostgresConnection(input)
+	}
+	if input.Target == nil {
+		return postgresConnection{}, errors.New("target_required")
+	}
+	if input.Identity == nil {
+		return postgresConnection{}, errors.New("identity_required")
+	}
+	if input.Credential == nil {
+		return postgresConnection{}, errors.New("credential_required")
 	}
 	connection := postgresConnection{
-		Host: normalizeHost(input.Host), Port: input.Port, User: input.User, Password: input.Password,
-		Database: input.Database, TLS: input.TLS, CAPEM: input.CAPEM,
+		Target:     postgresTarget{Host: normalizeHost(input.Target.Host), Port: input.Target.Port},
+		Identity:   postgresIdentity{User: input.Identity.User},
+		Credential: postgresCredential{Type: input.Credential.Type, Secret: input.Credential.Secret},
+		TLS:        postgresTLS{Mode: "verify-full"}, Lifecycle: postgresLifecycle{Mode: "ephemeral"},
 	}
-	if connection.Port == 0 {
-		connection.Port = postgresDefaultPort
+	if input.Database != nil {
+		connection.Database.Name = input.Database.Name
 	}
-	if connection.Database == "" {
-		connection.Database = postgresDefaultDatabase
+	if input.TLSConfig != nil {
+		connection.TLS = postgresTLS{Mode: input.TLSConfig.Mode, CAPEM: input.TLSConfig.CAPEM}
 	}
-	if connection.TLS == "" {
-		connection.TLS = "verify-full"
+	if input.Lifecycle != nil {
+		connection.Lifecycle.Mode = input.Lifecycle.Mode
 	}
+	applyPostgresDefaults(&connection)
 	if err := validatePostgresConnection(connection); err != nil {
 		return postgresConnection{}, err
 	}
 	return connection, nil
 }
 
-func resolvePostgresURI(value, caPEM string) (postgresConnection, error) {
+func (input postgresConnectionInput) hasStructuredFields() bool {
+	return input.Target != nil || input.Identity != nil || input.Credential != nil || input.TLSConfig != nil || input.Lifecycle != nil
+}
+
+func (input postgresConnectionInput) hasFlatFields() bool {
+	return input.Host != "" || input.Port != 0 || input.User != "" || input.Password != "" || input.TLS != "" || input.CAPEM != ""
+}
+
+func resolveLegacyPostgresConnection(input postgresConnectionInput) (postgresConnection, error) {
+	connection := postgresConnection{
+		Target:   postgresTarget{Host: normalizeHost(input.Host), Port: input.Port},
+		Database: postgresDatabase{Name: ""}, Identity: postgresIdentity{User: input.User},
+		Credential: postgresCredential{Type: "none"}, TLS: postgresTLS{Mode: input.TLS, CAPEM: input.CAPEM},
+		Lifecycle: postgresLifecycle{Mode: "ephemeral"},
+	}
+	if input.Database != nil {
+		connection.Database.Name = input.Database.Name
+	}
+	if input.Password != "" {
+		connection.Credential = postgresCredential{Type: "password", Secret: input.Password}
+	}
+	applyPostgresDefaults(&connection)
+	if err := validatePostgresConnection(connection); err != nil {
+		return postgresConnection{}, err
+	}
+	return connection, nil
+}
+
+func resolvePostgresURI(value, caPEM, lifecycle string) (postgresConnection, error) {
 	parsed, err := url.Parse(value)
 	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" || parsed.Fragment != "" {
 		return postgresConnection{}, errors.New("invalid_connection_uri")
@@ -118,78 +243,141 @@ func resolvePostgresURI(value, caPEM string) (postgresConnection, error) {
 	if err != nil {
 		return postgresConnection{}, errors.New("invalid_database")
 	}
-	if database == "" {
-		database = postgresDefaultDatabase
-	}
 	connection := postgresConnection{
-		Host: normalizeHost(parsed.Hostname()), Port: port, User: parsed.User.Username(), Password: password,
-		Database: database, TLS: tlsMode, CAPEM: caPEM,
+		Target:   postgresTarget{Host: normalizeHost(parsed.Hostname()), Port: port},
+		Database: postgresDatabase{Name: database}, Identity: postgresIdentity{User: parsed.User.Username()},
+		Credential: postgresCredential{Type: "none"}, TLS: postgresTLS{Mode: tlsMode, CAPEM: caPEM},
+		Lifecycle: postgresLifecycle{Mode: lifecycle},
 	}
+	if password != "" {
+		connection.Credential = postgresCredential{Type: "password", Secret: password}
+	}
+	applyPostgresDefaults(&connection)
 	if err := validatePostgresConnection(connection); err != nil {
 		return postgresConnection{}, err
 	}
 	return connection, nil
 }
 
+func applyPostgresDefaults(connection *postgresConnection) {
+	if connection.Target.Port == 0 {
+		connection.Target.Port = postgresDefaultPort
+	}
+	if connection.TLS.Mode == "" {
+		connection.TLS.Mode = "verify-full"
+	}
+	if connection.Lifecycle.Mode == "" {
+		connection.Lifecycle.Mode = "ephemeral"
+	}
+}
+
 func validatePostgresConnection(connection postgresConnection) error {
-	if connection.Host == "" {
+	if connection.Target.Host == "" {
 		return errors.New("host_required")
 	}
-	if strings.ContainsAny(connection.Host, `/\\`) {
+	if strings.ContainsAny(connection.Target.Host, `/\\`) {
 		return errors.New("invalid_host")
 	}
-	if connection.User == "" {
+	if connection.Identity.User == "" {
 		return errors.New("user_required")
 	}
-	if strings.ContainsRune(connection.User, 0) || strings.ContainsRune(connection.Password, 0) || strings.ContainsRune(connection.Database, 0) {
+	if strings.ContainsRune(connection.Identity.User, 0) || strings.ContainsRune(connection.Credential.Secret, 0) || strings.ContainsRune(connection.Database.Name, 0) {
 		return errors.New("invalid_connection_value")
 	}
-	if connection.Database == "" || strings.Contains(connection.Database, "/") {
+	if strings.Contains(connection.Database.Name, "/") {
 		return errors.New("invalid_database")
 	}
-	if connection.TLS != "verify-full" && connection.TLS != "disable" {
+	switch connection.Credential.Type {
+	case "password", "token":
+		if connection.Credential.Secret == "" {
+			return errors.New("credential_secret_required")
+		}
+	case "none":
+		if connection.Credential.Secret != "" {
+			return errors.New("credential_secret_forbidden")
+		}
+	default:
+		return errors.New("unsupported_credential_type")
+	}
+	if connection.TLS.Mode != "verify-full" && connection.TLS.Mode != "disable" {
 		return errors.New("unsupported_tls_mode")
 	}
-	if connection.TLS == "disable" && connection.CAPEM != "" {
+	if connection.TLS.Mode == "disable" && connection.TLS.CAPEM != "" {
 		return errors.New("ca_requires_tls")
+	}
+	if connection.Lifecycle.Mode != "ephemeral" && connection.Lifecycle.Mode != "retained" {
+		return errors.New("unsupported_lifecycle_mode")
 	}
 	return nil
 }
 
+type postgresConnectionHandle interface {
+	Execute(context.Context, string, postgresConnection) diagnosticResult
+	Close(context.Context) error
+}
+
+type postgresConnectionOpener interface {
+	Open(context.Context, postgresConnection, validatedTarget) (postgresConnectionHandle, diagnosticResult)
+}
+
 type postgresExecutor struct{}
 
-func (executor *postgresExecutor) Execute(ctx context.Context, request postgresDiagnosticRequest, target validatedTarget) diagnosticResult {
-	config, err := postgresConfig(request.resolved, target)
+type pgxPostgresConnection struct{ connection *pgx.Conn }
+
+func (executor *postgresExecutor) Open(ctx context.Context, resolved postgresConnection, target validatedTarget) (postgresConnectionHandle, diagnosticResult) {
+	config, err := postgresConfig(resolved, target)
 	if err != nil {
-		return failedPostgresResult("tls", "invalid_ca")
+		return nil, failedPostgresResult("tls", "invalid_ca")
 	}
 	connection, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
-		return classifyPostgresError(ctx, err)
+		return nil, classifyPostgresError(ctx, err)
 	}
-	defer connection.Close(context.Background())
+	return &pgxPostgresConnection{connection: connection}, diagnosticResult{}
+}
 
-	switch request.Operation {
+func (executor *postgresExecutor) Execute(ctx context.Context, request postgresDiagnosticRequest, target validatedTarget) diagnosticResult {
+	handle, failure := executor.Open(ctx, request.resolved, target)
+	if handle == nil {
+		return failure
+	}
+	defer handle.Close(context.Background())
+	return handle.Execute(ctx, request.Operation, request.resolved)
+}
+
+func (handle *pgxPostgresConnection) Execute(ctx context.Context, operation string, resolved postgresConnection) diagnosticResult {
+	switch operation {
 	case "connect":
-		return successfulPostgresResult(map[string]any{"connected": true, "tls": request.resolved.TLS})
+		var database, user string
+		var backendPID uint32
+		if err := handle.connection.QueryRow(ctx, "SELECT current_database(), current_user, pg_backend_pid()").Scan(&database, &user, &backendPID); err != nil {
+			return classifyPostgresError(ctx, err)
+		}
+		return successfulPostgresResult(map[string]any{"connected": true, "tls": resolved.TLS.Mode, "database": database, "user": user, "backend_pid": backendPID})
 	case "arithmetic_check":
-		return executeArithmeticCheck(ctx, connection)
+		return executeArithmeticCheck(ctx, handle.connection)
 	case "list_databases":
-		return executeListDatabases(ctx, connection)
+		return executeListDatabases(ctx, handle.connection)
 	case "list_schemas":
-		return executeListSchemas(ctx, connection)
+		return executeListSchemas(ctx, handle.connection)
 	default:
 		return failedPostgresResult("operation", "unsupported_operation")
 	}
+}
+
+func (handle *pgxPostgresConnection) Close(ctx context.Context) error {
+	return handle.connection.Close(ctx)
 }
 
 func postgresConfig(connection postgresConnection, target validatedTarget) (*pgx.ConnConfig, error) {
 	// Parse a fully explicit TLS-disabled URI first so pgx cannot inherit PG* file paths or credentials.
 	parsed := &url.URL{
 		Scheme: "postgresql",
-		Host:   net.JoinHostPort(connection.Host, strconv.Itoa(int(connection.Port))),
-		Path:   "/" + url.PathEscape(connection.Database),
-		User:   url.UserPassword(connection.User, connection.Password),
+		Host:   net.JoinHostPort(connection.Target.Host, strconv.Itoa(int(connection.Target.Port))),
+		User:   url.UserPassword(connection.Identity.User, connection.Credential.Secret),
+	}
+	if connection.Database.Name != "" {
+		parsed.Path = "/" + url.PathEscape(connection.Database.Name)
 	}
 	query := url.Values{"sslmode": {"disable"}}
 	parsed.RawQuery = query.Encode()
@@ -197,11 +385,11 @@ func postgresConfig(connection postgresConnection, target validatedTarget) (*pgx
 	if err != nil {
 		return nil, err
 	}
-	config.Host = connection.Host
-	config.Port = connection.Port
-	config.User = connection.User
-	config.Password = connection.Password
-	config.Database = connection.Database
+	config.Host = connection.Target.Host
+	config.Port = connection.Target.Port
+	config.User = connection.Identity.User
+	config.Password = connection.Credential.Secret
+	config.Database = connection.Database.Name
 	config.ConnectTimeout = 5 * time.Second
 	config.Fallbacks = nil
 	config.RuntimeParams = map[string]string{"application_name": "molejo-testkit", "statement_timeout": "8000"}
@@ -213,14 +401,14 @@ func postgresConfig(connection postgresConnection, target validatedTarget) (*pgx
 		return addresses, nil
 	}
 	config.DialFunc = target.dialContext
-	if connection.TLS == "disable" {
+	if connection.TLS.Mode == "disable" {
 		config.TLSConfig = nil
 		return config, nil
 	}
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: connection.Host}
-	if connection.CAPEM != "" {
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: connection.Target.Host}
+	if connection.TLS.CAPEM != "" {
 		roots := x509.NewCertPool()
-		if !roots.AppendCertsFromPEM([]byte(connection.CAPEM)) {
+		if !roots.AppendCertsFromPEM([]byte(connection.TLS.CAPEM)) {
 			return nil, errors.New("invalid CA")
 		}
 		tlsConfig.RootCAs = roots

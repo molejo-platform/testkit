@@ -168,6 +168,7 @@ type application struct {
 	logger      *slog.Logger
 	connections *connectionStats
 	peers       *peerMonitor
+	diagnostics *diagnosticService
 }
 
 const (
@@ -428,6 +429,7 @@ func newApplication(config handlerConfig) *application {
 	}
 	if config.diagnostics != nil {
 		mux.HandleFunc("/api/diagnostics/postgres", logHTTPRequest(config.logger, "/api/diagnostics/postgres", config.diagnostics.handler))
+		mux.HandleFunc("/api/diagnostics/postgres/", logHTTPRequest(config.logger, "/api/diagnostics/postgres", config.diagnostics.handler))
 	}
 	mux.HandleFunc("/graphql", graphQL)
 	mux.HandleFunc("/events", exactGET("/events", func(writer http.ResponseWriter, request *http.Request) {
@@ -443,11 +445,17 @@ func newApplication(config handlerConfig) *application {
 		logger:      config.logger,
 		connections: connections,
 		peers:       config.peers,
+		diagnostics: config.diagnostics,
 	}
 }
 
 func (app *application) close() {
 	app.hub.close()
+	if app.diagnostics != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		app.diagnostics.Close(ctx)
+	}
 }
 
 func (app *application) waitForWebSockets(ctx context.Context) error {

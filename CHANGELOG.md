@@ -18,8 +18,12 @@ stable release until promotion.
   listing.
 - Added backend-controlled capability discovery, token-file authentication,
   and a read-only destination policy for diagnostic targets.
+- Added separated PostgreSQL target, database, identity, credential, TLS, and
+  lifecycle contracts, including process-local retained connections.
+- Added local `test-local`, `test-browser`, `test-postgres`, and `test-full`
+  gates; the PostgreSQL gate provisions and removes a disposable real server.
 - Added browser-level Playwright coverage and a pull-request workflow covering
-  Go, frontend, browser, PostgreSQL integration, and vulnerability checks.
+  Go, frontend, browser, and vulnerability checks.
 
 ### Changed
 
@@ -32,6 +36,8 @@ stable release until promotion.
   the main server module without changing the existing public routes.
 - Expanded localized documentation and browser content for the PostgreSQL
   diagnostic workflow and its trust boundary.
+- PostgreSQL now delegates database selection to the server when `database` is
+  omitted and reports the effective database and backend process identifier.
 
 ### Fixed
 

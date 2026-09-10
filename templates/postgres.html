@@ -20,21 +20,25 @@
       <fieldset><legend>{{ .T "postgres.access" }}</legend><label>{{ .T "postgres.token" }}<input type="password" name="token" autocomplete="off" required></label></fieldset>
       <fieldset>
         <legend>{{ .T "postgres.connection" }}</legend>
-        <div class="form-choice"><label><input type="radio" name="mode" value="fields" checked> {{ .T "postgres.mode_fields" }}</label><label><input type="radio" name="mode" value="uri"> URI</label></div>
+        <div class="form-choice"><label><input type="radio" name="mode" value="fields" data-postgres-connection-control checked> {{ .T "postgres.mode_fields" }}</label><label><input type="radio" name="mode" value="uri" data-postgres-connection-control> URI</label></div>
         <div class="form-grid" data-postgres-fields>
-          <label>{{ .T "postgres.host" }}<input name="host" autocomplete="off"></label>
-          <label>{{ .T "postgres.port" }}<input name="port" type="number" min="1" max="65535" value="5432"></label>
-          <label>{{ .T "postgres.user" }}<input name="user" autocomplete="username"></label>
-          <label>{{ .T "postgres.password" }}<input name="password" type="password" autocomplete="current-password"></label>
-          <label>{{ .T "postgres.database" }}<input name="database" value="postgres" autocomplete="off"></label>
-          <label>TLS<select name="tls"><option value="verify-full">verify-full</option><option value="disable">{{ .T "postgres.tls_disable" }}</option></select></label>
+          <label>{{ .T "postgres.host" }}<input name="host" autocomplete="off" data-postgres-connection-control></label>
+          <label>{{ .T "postgres.port" }}<input name="port" type="number" min="1" max="65535" value="5432" data-postgres-connection-control></label>
+          <label>{{ .T "postgres.user" }}<input name="user" autocomplete="username" data-postgres-connection-control></label>
+          <label>{{ .T "postgres.credential_type" }}<select name="credential_type" data-postgres-capability="credential_types" data-postgres-connection-control><option value="password">{{ .T "postgres.password" }}</option><option value="token">Token</option><option value="none">{{ .T "postgres.credential_none" }}</option></select></label>
+          <label data-postgres-credential-secret>{{ .T "postgres.credential_secret" }}<input name="credential_secret" type="password" autocomplete="current-password" data-postgres-connection-control></label>
+          <label>{{ .T "postgres.database" }}<input name="database" autocomplete="off" placeholder="{{ .T "postgres.database_optional" }}" data-postgres-connection-control></label>
+          <label>TLS<select name="tls" data-postgres-capability="tls_modes" data-postgres-connection-control><option value="verify-full">verify-full</option><option value="disable">{{ .T "postgres.tls_disable" }}</option></select></label>
+          <label>{{ .T "postgres.lifecycle" }}<select name="lifecycle" data-postgres-capability="lifecycle_modes" data-postgres-connection-control><option value="ephemeral">{{ .T "postgres.lifecycle_ephemeral" }}</option><option value="retained">{{ .T "postgres.lifecycle_retained" }}</option></select></label>
         </div>
-        <label data-postgres-uri hidden>URI<input name="uri" type="password" autocomplete="off" placeholder="postgresql://user:password@host:5432/postgres"></label>
-        <label>{{ .T "postgres.ca" }}<textarea name="ca_pem" rows="4" spellcheck="false"></textarea></label>
+        <label data-postgres-uri hidden>URI<input name="uri" type="password" autocomplete="off" placeholder="postgresql://user:password@host:5432/database" data-postgres-connection-control></label>
+        <label data-postgres-ca>{{ .T "postgres.ca" }}<textarea name="ca_pem" rows="4" spellcheck="false" data-postgres-connection-control></textarea></label>
       </fieldset>
       <fieldset>
         <legend>{{ .T "postgres.operations" }}</legend>
         <div class="diagnostic-actions">
+          <button class="button button--primary" type="button" data-postgres-create hidden>{{ .T "postgres.create_connection" }}</button>
+          <button class="button button--secondary" type="button" data-postgres-destroy hidden>{{ .T "postgres.destroy_connection" }}</button>
           <button class="button button--primary" type="button" data-postgres-operation="connect">{{ .T "postgres.connect" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="arithmetic_check">SELECT 1 + 1</button>
           <button class="button button--secondary" type="button" data-postgres-operation="list_databases">{{ .T "postgres.list_databases" }}</button>

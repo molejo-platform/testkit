@@ -304,13 +304,20 @@ política usa JSON estrito, por exemplo:
 {"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
 ```
 
-O browser envia o token em `Authorization: Bearer ...` e mantém token e
-credenciais do banco apenas na memória da página. A API expõe somente `connect`,
-`arithmetic_check`, `list_databases` e `list_schemas`; não aceita SQL. Cada
-operação abre uma nova conexão, tem prazo total de 10 segundos, não faz retry e
-há no máximo quatro execuções concorrentes por processo. URI e campos separados
-são mutuamente exclusivos. TLS usa `verify-full` por padrão; desabilitá-lo é uma
-escolha explícita. Destinos especiais, incluindo metadata cloud/container, são
+O browser envia o token em `Authorization: Bearer ...`; esse token da API é
+separado da credencial PostgreSQL. O contrato estruturado separa `target`,
+`database` opcional, `identity`, `credential`, `tls_config` e `lifecycle`. Os
+tipos de credencial são `password`, `token` e `none`. Sem `database`, o próprio
+PostgreSQL seleciona o banco segundo suas regras de inicialização.
+
+A API expõe somente `connect`, `arithmetic_check`, `list_databases` e
+`list_schemas`; não aceita SQL. Operações efêmeras abrem e fecham uma conexão.
+Conexões retidas ficam apenas na memória do processo, são serializadas e precisam
+ser destruídas explicitamente; o shutdown também as fecha. Há no máximo oito
+conexões retidas e quatro requisições de diagnóstico concorrentes por processo.
+Cada requisição tem prazo total de 10 segundos e não faz retry. URI e campos
+estruturados são mutuamente exclusivos. TLS usa `verify-full` por padrão;
+desabilitá-lo é uma escolha explícita. Destinos especiais, incluindo metadata cloud/container, são
 rejeitados antes da conexão. Sirva esta página exclusivamente por HTTPS.
 
 ## Logs estruturados
@@ -385,17 +392,17 @@ de proveniência estão fora do contrato atual de release.
 
 ## Desenvolvimento
 
-Execute o gate local de qualidade:
+Execute o gate local essencial, sem Docker ou serviço externo:
 
 ```sh
-gofmt -w *.go
-go test -race -cover ./...
-go vet ./...
-go mod tidy -diff
 npm ci
-npm run test:frontend
-npm run test:browser
+make test-local
 ```
+
+Use `make test-browser` para os contratos do browser, `make test-postgres` para
+um PostgreSQL 18 real e descartável e `make test-full` para todas as camadas. Os
+testes de integração PostgreSQL usam a build tag `integration` e falham, em vez
+de pular, quando a DSN não está definida.
 
 Construa e exercite o contêiner final sempre que runtime, assets incorporados,
 probes ou Dockerfile forem alterados.

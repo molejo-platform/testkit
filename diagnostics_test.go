@@ -97,7 +97,7 @@ func TestDiagnosticEndpointRejectsUnauthorizedAndForbiddenTargetsBeforeExecution
 func TestDiagnosticEndpointExecutesAllowedTargetWithoutEchoingSecrets(t *testing.T) {
 	service, executor := testDiagnosticService(t)
 	response := httptest.NewRecorder()
-	body := `{"operation":"connect","connection":{"host":"203.0.113.10","user":"operator","password":"sentinel-secret","tls":"disable"}}`
+	body := `{"operation":"connect","connection":{"target":{"host":"203.0.113.10"},"identity":{"user":"operator"},"credential":{"type":"password","secret":"sentinel-secret"},"tls_config":{"mode":"disable"},"lifecycle":{"mode":"ephemeral"}}}`
 	newHandlerWithConfig(handlerConfig{diagnostics: service}).ServeHTTP(response, diagnosticRequest(body))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
