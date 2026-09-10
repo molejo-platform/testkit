@@ -7,7 +7,12 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-No changes yet.
+### Changed
+
+- Completed the Molejo rebrand across localized browser copy, the Go module path,
+  probe User-Agent, official logo asset, dark palette, and typography.
+- Added the local branding contract so future browser changes preserve the
+  approved Molejo assets and semantic color roles.
 
 ## [0.7.1] - 2026-08-29
 

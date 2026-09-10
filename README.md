@@ -23,7 +23,7 @@ diagnostics remain an explicit container command.
 | Language detection aliases | `GET /`, `GET /websocket`, `GET /rest`, `GET /graphql-lab`, `GET /sse` |
 | Localized browser pages | `GET /en/`, `GET /pt-BR/`, `GET /es-AR/` |
 | Localized browser labs | `GET /en/rest`, `/en/graphql-lab`, `/en/sse`, `/en/websocket` and matching translated paths |
-| Static asset | `GET /static/style.css` |
+| Static assets | `GET /static/style.css` and embedded Molejo branding |
 | Liveness | `GET /healthz` |
 | Readiness | `GET /readyz` |
 | Unready response | `GET /not-ready` |
@@ -322,6 +322,9 @@ English is the canonical documentation language. Available translations:
 Translations preserve commands, paths, endpoint names, fields, and protocol
 identifiers in English. If translated content diverges, the English version
 defines the current contract.
+
+The visual identity rules and asset provenance are documented in the
+[Molejo Testkit branding contract](docs/BRANDING.md).
 
 ## Contributing
 

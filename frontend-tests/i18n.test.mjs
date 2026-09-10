@@ -27,9 +27,9 @@ test("interpolates translated UI labels and singular and plural relative time fo
       }];
     })),
     {
-      en: { brand: "Fruto Testkit", sent: "Sent", minute: "1 minute ago", hour: "1 hour ago", day: "1 day ago", minutes: "2 minutes ago" },
-      "pt-BR": { brand: "Fruto Testkit", sent: "Enviada", minute: "há 1 minuto", hour: "há 1 hora", day: "há 1 dia", minutes: "há 2 minutos" },
-      "es-AR": { brand: "Fruto Testkit", sent: "Enviado", minute: "hace 1 minuto", hour: "hace 1 hora", day: "hace 1 día", minutes: "hace 2 minutos" },
+      en: { brand: "Molejo Testkit", sent: "Sent", minute: "1 minute ago", hour: "1 hour ago", day: "1 day ago", minutes: "2 minutes ago" },
+      "pt-BR": { brand: "Molejo Testkit", sent: "Enviada", minute: "há 1 minuto", hour: "há 1 hora", day: "há 1 dia", minutes: "há 2 minutos" },
+      "es-AR": { brand: "Molejo Testkit", sent: "Enviado", minute: "hace 1 minuto", hour: "hace 1 hora", day: "hace 1 día", minutes: "hace 2 minutos" },
     },
   );
 });

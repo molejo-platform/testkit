@@ -25,7 +25,10 @@ func TestPublicHandlerDoesNotExposeOutboundProbe(t *testing.T) {
 }
 
 func TestRunProbeRequestsControlledHTTPDestination(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if got := request.Header.Get("User-Agent"); got != "molejo-testkit/"+version {
+			t.Errorf("User-Agent = %q, want %q", got, "molejo-testkit/"+version)
+		}
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte("controlled-upstream"))
 	}))

@@ -13,8 +13,9 @@
     <div class="app-shell">
       <header class="topbar" data-testid="topbar">
         <a class="brand" href="{{ .HomeURL }}" aria-label="{{ .T "brand.home_label" }}">
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span></span>
-          <span class="brand-name">{{ .T "brand.name" }}</span>
+          <img class="brand-logo brand-logo--full" src="/static/{{ .StaticAssetVersion }}/brand/molejo-horizontal-on-dark.webp" alt="Molejo" width="420" height="90">
+          <img class="brand-logo brand-logo--compact" src="/static/{{ .StaticAssetVersion }}/brand/molejo-symbol-on-dark.webp" alt="Molejo" width="180" height="99">
+          <span class="brand-product-name">{{ .T "brand.product_name" }}</span>
         </a>
         <div class="build-meta">
           <span class="eyebrow">{{ .T "console.label" }}</span>

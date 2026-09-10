@@ -24,7 +24,7 @@ comando explícito del contenedor.
 | Aliases de detección de idioma | `GET /`, `GET /websocket`, `GET /rest`, `GET /graphql-lab`, `GET /sse` |
 | Páginas localizadas | `GET /en/`, `GET /pt-BR/`, `GET /es-AR/` |
 | Laboratorios localizados en el navegador | `GET /en/rest`, `/en/graphql-lab`, `/en/sse`, `/en/websocket` y caminos traducidos equivalentes |
-| Asset estático | `GET /static/style.css` |
+| Assets estáticos | `GET /static/style.css` y branding Molejo incorporado |
 | Liveness | `GET /healthz` |
 | Readiness | `GET /readyz` |
 | Respuesta no disponible | `GET /not-ready` |
@@ -333,6 +333,9 @@ El inglés es el idioma canónico de la documentación. Traducciones disponibles
 Las traducciones conservan en inglés los comandos, paths, endpoints, campos e
 identificadores de protocolo. Si existe una divergencia, la versión en inglés
 define el contrato vigente.
+
+Las reglas de identidad visual y el origen de los assets están documentados en el
+[contrato de branding de Molejo Testkit](../BRANDING.md).
 
 ## Contribuir
 

@@ -693,7 +693,9 @@ func TestStaticAssets(t *testing.T) {
 	}{
 		{path: "/static/style.css", contentType: "text/css; charset=utf-8", contains: "font-family"},
 		{path: "/static/app.js", contentType: "text/javascript; charset=utf-8", contains: "mountWebSocketClient"},
-		{path: "/static/correlation-id.js", contentType: "text/javascript; charset=utf-8", contains: "createCorrelationID"},
+			{path: "/static/correlation-id.js", contentType: "text/javascript; charset=utf-8", contains: "createCorrelationID"},
+			{path: "/static/brand/molejo-horizontal-on-dark.webp", contentType: "image/webp", contains: "RIFF"},
+			{path: "/static/brand/molejo-symbol-on-dark.webp", contentType: "image/webp", contains: "RIFF"},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
@@ -801,6 +803,8 @@ func TestDashboardRendersWebSocketConsole(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<html lang="en">`,
+		`alt="Molejo"`,
+		"Testkit",
 		"Transport console",
 		"build " + version,
 		"Open lab",

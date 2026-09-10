@@ -23,7 +23,7 @@ saída. Diagnósticos pontuais continuam exigindo um comando explícito do cont�
 | Aliases de detecção de idioma | `GET /`, `GET /websocket`, `GET /rest`, `GET /graphql-lab`, `GET /sse` |
 | Páginas localizadas | `GET /en/`, `GET /pt-BR/`, `GET /es-AR/` |
 | Laboratórios localizados no browser | `GET /en/rest`, `/en/graphql-lab`, `/en/sse`, `/en/websocket` e caminhos traduzidos correspondentes |
-| Asset estático | `GET /static/style.css` |
+| Assets estáticos | `GET /static/style.css` e branding Molejo incorporado |
 | Liveness | `GET /healthz` |
 | Readiness | `GET /readyz` |
 | Resposta indisponível | `GET /not-ready` |
@@ -325,6 +325,9 @@ Inglês é o idioma canônico da documentação. Traduções disponíveis:
 As traduções preservam comandos, caminhos, endpoints, campos e identificadores de
 protocolo em inglês. Em caso de divergência, a versão em inglês define o contrato
 atual.
+
+As regras de identidade visual e a origem dos assets estão documentadas no
+[contrato de branding do Molejo Testkit](../BRANDING.md).
 
 ## Contribuindo
 

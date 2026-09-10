@@ -1,4 +1,4 @@
-module github.com/fruto-platform/testkit
+module github.com/molejo-platform/testkit
 
 go 1.26.0
 

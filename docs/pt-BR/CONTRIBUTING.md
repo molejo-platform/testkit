@@ -47,6 +47,8 @@ go mod tidy -diff
 - Adicione um teste de regressão antes de corrigir um defeito.
 - Atualize a documentação em inglês e as traduções correspondentes quando o
   comportamento mudar.
+- Use o logo oficial e os tokens semânticos de cor descritos em
+  [docs/BRANDING.md](../BRANDING.md) nas alterações da interface do browser.
 
 Formate e valide o código:
 

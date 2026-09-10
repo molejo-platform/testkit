@@ -46,6 +46,8 @@ go mod tidy -diff
 - Add a regression test before fixing a defect.
 - Update English documentation and corresponding translations when behavior
   changes.
+- Use the official logo and semantic color tokens described in
+  [docs/BRANDING.md](docs/BRANDING.md) for browser interface changes.
 
 Format and verify the code:
 

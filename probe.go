@@ -49,7 +49,7 @@ func probeHTTP(ctx context.Context, upstream *url.URL) (response, error) {
 	if err != nil {
 		return response{}, fmt.Errorf("create request: %w", err)
 	}
-	request.Header.Set("User-Agent", "fruto-testkit/"+version)
+	request.Header.Set("User-Agent", "molejo-testkit/"+version)
 
 	upstreamResponse, err := client.Do(request)
 	if err != nil {
