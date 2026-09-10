@@ -36,6 +36,27 @@ only in disposable test workloads. Its file path is fixed at process startup by
 size and SHA-256 metadata, but anyone who can reach the endpoint can replace the
 marker. Do not store credentials or other sensitive values in it.
 
+## Outbound diagnostic boundary
+
+PostgreSQL diagnostics change the trust boundary and are disabled by default.
+Enabling them requires a deployment token from a read-only file and a read-only
+host/CIDR and port policy. Requests without valid authorization, from a foreign
+browser origin, or outside the policy are rejected before network access. The
+server resolves A/AAAA addresses for every attempt, rejects loopback, link-local,
+multicast and unspecified addresses, and dials only a validated address while
+retaining the original hostname for TLS verification.
+
+Assets at risk are typed database credentials, the workload network identity,
+reachable services, discovered metadata, and process availability. Required
+deployment controls are HTTPS, no direct target bypass, exact egress policy,
+`verify-full` TLS by default, and aggregate limits when multiple replicas run.
+The API uses fixed operations, strict and bounded data, deadlines, same-origin
+requests, framing protection, and no credential store. Logs and responses never
+include a DSN, password, CA body, SQL text, discovered address, or raw driver
+error. The token authorizes an installation, not an individual, and offers no
+RBAC or protection from administrators controlling the process or mounted files.
+Remove disposable diagnostic workloads after use.
+
 ## Reporting a vulnerability
 
 GitHub private vulnerability reporting is not enabled for this repository yet.

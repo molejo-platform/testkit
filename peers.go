@@ -44,7 +44,7 @@ const (
 const (
 	peerReasonOK                = "ok"
 	peerReasonDNSFailed         = "dns_failed"
-	peerReasonConnectTimeout    = "connect_timeout"
+	peerReasonRequestTimeout    = "request_timeout"
 	peerReasonConnectionRefused = "connection_refused"
 	peerReasonConnectFailed     = "connect_failed"
 	peerReasonTLSFailed         = "tls_failed"
@@ -443,7 +443,7 @@ func classifyPeerRequestError(ctx context.Context, err error) (string, string) {
 	}
 	var networkError net.Error
 	if errors.As(err, &networkError) && networkError.Timeout() {
-		return peerUnreachable, peerReasonConnectTimeout
+		return peerUnreachable, peerReasonRequestTimeout
 	}
 	return peerUnreachable, peerReasonConnectFailed
 }

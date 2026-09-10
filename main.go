@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -19,22 +18,18 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/graphql-go/graphql"
 )
 
 const (
 	maxJSONBodyBytes         = 64 * 1024
 	maxGraphQLBodyBytes      = 16 * 1024
 	maxWebSocketBytes        = 4 * 1024
-	defaultHTTPPort          = 8080
-	defaultSSEInterval       = time.Second
 	connectionReportInterval = 15 * time.Minute
 	shutdownTimeout          = 5 * time.Second
 	writeWait                = 10 * time.Second
@@ -60,6 +55,7 @@ var (
 	restPageTemplates      = newPageTemplates("rest.html")
 	graphqlPageTemplates   = newPageTemplates("graphql-lab.html")
 	ssePageTemplates       = newPageTemplates("sse.html")
+	postgresPageTemplates  = newPageTemplates("postgres.html")
 	pageTranslationCatalog = mustLoadTranslationCatalog()
 )
 
@@ -89,6 +85,7 @@ type pageData struct {
 	MolejoURL          string
 	LabEndpoint        string
 	Protocols          []protocolCardView
+	DatabaseProviders  []protocolCardView
 	Clients            []webSocketClientView
 	Breadcrumbs        []breadcrumb
 }
@@ -162,6 +159,7 @@ type handlerConfig struct {
 	logger      *slog.Logger
 	peers       *peerMonitor
 	persistence *persistenceStore
+	diagnostics *diagnosticService
 }
 
 type application struct {
@@ -259,30 +257,17 @@ func main() {
 	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	listenAddress, err := httpListenAddressFromEnv()
+	runtime, err := loadRuntimeConfig(logger)
 	if err != nil {
-		logger.ErrorContext(ctx, "server port configuration failed", "event", "server.port_configuration_failed", "error", err)
+		logger.ErrorContext(ctx, "server configuration failed", "event", "server.configuration_failed", "error", err)
 		os.Exit(1)
 	}
-	peerMonitor, err := loadPeerMonitorFromEnv(logger)
-	if err != nil {
-		logger.ErrorContext(ctx, "peer configuration failed", "event", "peers.configuration_failed", "error", err)
-		os.Exit(1)
-	}
-	var persistence *persistenceStore
-	if persistencePath := strings.TrimSpace(os.Getenv("TESTKIT_PERSISTENCE_FILE")); persistencePath != "" {
-		persistence, err = newPersistenceStore(persistencePath)
-		if err != nil {
-			logger.ErrorContext(ctx, "persistence configuration failed", "event", "persistence.configuration_failed", "error", err)
-			os.Exit(1)
-		}
-	}
-	listener, err := net.Listen("tcp", listenAddress)
+	listener, err := net.Listen("tcp", runtime.listenAddress)
 	if err != nil {
 		logger.ErrorContext(ctx, "server listen failed", "event", "server.listen_failed", "error", err)
 		os.Exit(1)
 	}
-	app := newApplication(handlerConfig{sseInterval: sseIntervalFromEnv(), logger: logger, peers: peerMonitor, persistence: persistence})
+	app := newApplication(handlerConfig{sseInterval: runtime.sseInterval, logger: logger, peers: runtime.peers, persistence: runtime.persistence, diagnostics: runtime.diagnostics})
 	logger.InfoContext(ctx, "server started", "event", "server.started", "listen_address", listener.Addr().String())
 	if err := serve(ctx, listener, app); err != nil {
 		logger.ErrorContext(ctx, "server failed", "event", "server.failed", "error", err)
@@ -380,6 +365,16 @@ func withVersionHeader(next http.Handler) http.Handler {
 	})
 }
 
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		writer.Header().Set("Referrer-Policy", "no-referrer")
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		writer.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(writer, request)
+	})
+}
+
 func newApplication(config handlerConfig) *application {
 	if config.sseInterval <= 0 {
 		config.sseInterval = defaultSSEInterval
@@ -396,17 +391,24 @@ func newApplication(config handlerConfig) *application {
 	mux.HandleFunc("/rest", exactGET("/rest", redirectToLocalized("/rest")))
 	mux.HandleFunc("/graphql-lab", exactGET("/graphql-lab", redirectToLocalized("/graphql-lab")))
 	mux.HandleFunc("/sse", exactGET("/sse", redirectToLocalized("/sse")))
+	if config.diagnostics != nil {
+		mux.HandleFunc("/postgres", exactGET("/postgres", redirectToLocalized("/postgres")))
+	}
 	for _, currentLocale := range supportedLocales {
 		homePath := localizedPath(currentLocale, "/")
 		webSocketPath := localizedPath(currentLocale, "/websocket")
 		restPath := localizedPath(currentLocale, "/rest")
 		graphqlPath := localizedPath(currentLocale, "/graphql-lab")
 		ssePath := localizedPath(currentLocale, "/sse")
-		mux.HandleFunc(homePath, exactGET(homePath, localizedIndex(currentLocale)))
+		mux.HandleFunc(homePath, exactGET(homePath, localizedIndex(currentLocale, config.diagnostics != nil)))
 		mux.HandleFunc(webSocketPath, exactGET(webSocketPath, localizedWebSocketIndex(currentLocale)))
 		mux.HandleFunc(restPath, exactGET(restPath, localizedRESTIndex(currentLocale)))
 		mux.HandleFunc(graphqlPath, exactGET(graphqlPath, localizedGraphQLIndex(currentLocale)))
 		mux.HandleFunc(ssePath, exactGET(ssePath, localizedSSEIndex(currentLocale)))
+		if config.diagnostics != nil {
+			postgresPath := localizedPath(currentLocale, "/postgres")
+			mux.HandleFunc(postgresPath, exactGET(postgresPath, localizedPostgresIndex(currentLocale)))
+		}
 	}
 	mux.HandleFunc("/static/", staticAsset)
 	mux.HandleFunc("/healthz", exactGET("/healthz", writeOK))
@@ -424,6 +426,9 @@ func newApplication(config handlerConfig) *application {
 	if config.persistence != nil {
 		mux.HandleFunc("/api/persistence", logHTTPRequest(config.logger, "/api/persistence", config.persistence.handler))
 	}
+	if config.diagnostics != nil {
+		mux.HandleFunc("/api/diagnostics/postgres", logHTTPRequest(config.logger, "/api/diagnostics/postgres", config.diagnostics.handler))
+	}
 	mux.HandleFunc("/graphql", graphQL)
 	mux.HandleFunc("/events", exactGET("/events", func(writer http.ResponseWriter, request *http.Request) {
 		events(writer, request, config.sseInterval, config.logger, connections)
@@ -433,7 +438,7 @@ func newApplication(config handlerConfig) *application {
 	})
 
 	return &application{
-		handler:     withVersionHeader(mux),
+		handler:     withSecurityHeaders(withVersionHeader(mux)),
 		hub:         webSocketHub,
 		logger:      config.logger,
 		connections: connections,
@@ -477,106 +482,6 @@ func (app *application) logActiveConnections(ctx context.Context) {
 	)
 }
 
-type responseLogWriter struct {
-	http.ResponseWriter
-	statusCode int
-	bytes      int
-}
-
-func (writer *responseLogWriter) WriteHeader(statusCode int) {
-	if writer.statusCode == 0 {
-		writer.statusCode = statusCode
-	}
-	writer.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (writer *responseLogWriter) Write(data []byte) (int, error) {
-	if writer.statusCode == 0 {
-		writer.statusCode = http.StatusOK
-	}
-	written, err := writer.ResponseWriter.Write(data)
-	writer.bytes += written
-	return written, err
-}
-
-func logHTTPRequest(logger *slog.Logger, route string, handler http.HandlerFunc) http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		started := time.Now()
-		correlationID := resolveCorrelationID(request.Header.Get(correlationHeader))
-		writer.Header().Set(correlationHeader, correlationID)
-		logWriter := &responseLogWriter{ResponseWriter: writer}
-		handler(logWriter, request)
-		statusCode := logWriter.statusCode
-		if statusCode == 0 {
-			statusCode = http.StatusOK
-		}
-		logger.InfoContext(request.Context(), "HTTP request completed",
-			"event", "http.request.completed",
-			"http_method", request.Method,
-			"route", route,
-			"status_code", statusCode,
-			"duration_ms", durationMilliseconds(time.Since(started)),
-			"response_bytes", logWriter.bytes,
-			"correlation_id", correlationID,
-		)
-	}
-}
-
-func resolveCorrelationID(value string) string {
-	if isUUIDv7(value) {
-		return strings.ToLower(value)
-	}
-	return newUUIDv7()
-}
-
-func isUUIDv7(value string) bool {
-	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
-		return false
-	}
-	encoded := value[:8] + value[9:13] + value[14:18] + value[19:23] + value[24:]
-	decoded, err := hex.DecodeString(encoded)
-	if err != nil {
-		return false
-	}
-	return decoded[6]>>4 == 7 && decoded[8]&0xc0 == 0x80
-}
-
-func newUUIDv7() string {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		panic(fmt.Errorf("generate correlation ID: %w", err))
-	}
-	milliseconds := uint64(time.Now().UnixMilli())
-	id[0] = byte(milliseconds >> 40)
-	id[1] = byte(milliseconds >> 32)
-	id[2] = byte(milliseconds >> 24)
-	id[3] = byte(milliseconds >> 16)
-	id[4] = byte(milliseconds >> 8)
-	id[5] = byte(milliseconds)
-	id[6] = id[6]&0x0f | 0x70
-	id[8] = id[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
-}
-
-func durationMilliseconds(duration time.Duration) float64 {
-	return float64(duration.Microseconds()) / 1000
-}
-
-func exactGET(path string, handler http.HandlerFunc) http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != path {
-			http.NotFound(writer, request)
-			return
-		}
-		if request.Method != http.MethodGet {
-			writer.Header().Set("Allow", http.MethodGet)
-			http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		handler(writer, request)
-	}
-}
-
 func redirectToLocalized(page string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Cache-Control", "private, no-store")
@@ -586,15 +491,40 @@ func redirectToLocalized(page string) http.HandlerFunc {
 	}
 }
 
-func localizedIndex(currentLocale locale) http.HandlerFunc {
+func localizedIndex(currentLocale locale, postgresEnabled bool) http.HandlerFunc {
 	return func(writer http.ResponseWriter, _ *http.Request) {
+		var databases []protocolCardView
+		if postgresEnabled {
+			databases = localizedDatabaseCards(currentLocale)
+		}
 		data := localizedPageData(currentLocale, "/", pageData{
-			TitleKey:  "console.label",
-			Version:   version,
-			Protocols: localizedProtocolCards(currentLocale),
+			TitleKey:          "console.label",
+			Version:           version,
+			Protocols:         localizedProtocolCards(currentLocale),
+			DatabaseProviders: databases,
 		})
 		renderLocalizedPage(writer, indexPageTemplates, currentLocale, data)
 	}
+}
+
+func localizedPostgresIndex(currentLocale locale) http.HandlerFunc {
+	return localizedLabIndex(currentLocale, "/postgres", "postgres.lab_title", "/api/diagnostics/postgres", "postgres.name", postgresPageTemplates)
+}
+
+func localizedDatabaseCards(currentLocale locale) []protocolCardView {
+	texts := pageTranslationCatalog.translations(currentLocale)
+	return []protocolCardView{{
+		Index:       "01",
+		ID:          "postgres",
+		Name:        texts["postgres.name"],
+		Endpoint:    "/api/diagnostics/postgres",
+		Description: texts["postgres.card_description"],
+		URL:         localizedPath(currentLocale, "/postgres"),
+		Active:      true,
+		OpenLab:     texts["home.open_lab"],
+		ComingSoon:  texts["home.coming_soon"],
+		StatusBadge: statusBadgeView{Class: "active", Label: texts["status.active"]},
+	}}
 }
 
 func localizedRESTIndex(currentLocale locale) http.HandlerFunc {
@@ -771,102 +701,6 @@ func staticAsset(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
 	http.ServeContent(writer, request, assetPath, time.Time{}, bytes.NewReader(data))
-}
-
-func writeOK(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, response{Status: "ok", Version: version})
-}
-
-func listItems(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, []item{
-		{ID: "item-1", Name: "First item"},
-		{ID: "item-2", Name: "Second item"},
-	})
-}
-
-func apiEcho(writer http.ResponseWriter, request *http.Request) {
-	if request.URL.Path != "/api/echo" {
-		http.NotFound(writer, request)
-		return
-	}
-	if request.Method != http.MethodPost {
-		writer.Header().Set("Allow", http.MethodPost)
-		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var payload json.RawMessage
-	if err := decodeJSONBody(writer, request, maxJSONBodyBytes, &payload); err != nil {
-		return
-	}
-	writeJSON(writer, http.StatusOK, struct {
-		Data   json.RawMessage `json:"data"`
-		Method string          `json:"method"`
-		Path   string          `json:"path"`
-	}{Data: payload, Method: request.Method, Path: request.URL.Path})
-}
-
-func graphQL(writer http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		writer.Header().Set("Allow", http.MethodPost)
-		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var payload struct {
-		Query         string                 `json:"query"`
-		Variables     map[string]interface{} `json:"variables"`
-		OperationName string                 `json:"operationName"`
-	}
-	if err := decodeJSONBody(writer, request, maxGraphQLBodyBytes, &payload); err != nil {
-		return
-	}
-	if strings.TrimSpace(payload.Query) == "" {
-		http.Error(writer, "GraphQL query is required", http.StatusBadRequest)
-		return
-	}
-
-	result := graphql.Do(graphql.Params{
-		Schema:         newGraphQLSchema(),
-		RequestString:  payload.Query,
-		VariableValues: payload.Variables,
-		OperationName:  payload.OperationName,
-	})
-	writeJSON(writer, http.StatusOK, result)
-}
-
-func newGraphQLSchema() graphql.Schema {
-	query := graphql.NewObject(graphql.ObjectConfig{
-		Name: "Query",
-		Fields: graphql.Fields{
-			"status": &graphql.Field{
-				Type:    graphql.NewNonNull(graphql.String),
-				Resolve: func(graphql.ResolveParams) (interface{}, error) { return "ok", nil },
-			},
-			"version": &graphql.Field{
-				Type:    graphql.NewNonNull(graphql.String),
-				Resolve: func(graphql.ResolveParams) (interface{}, error) { return version, nil },
-			},
-			"echo": &graphql.Field{
-				Type: graphql.NewNonNull(graphql.String),
-				Args: graphql.FieldConfigArgument{
-					"message": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
-				},
-				Resolve: func(params graphql.ResolveParams) (interface{}, error) {
-					message, ok := params.Args["message"].(string)
-					if !ok {
-						return nil, errors.New("message must be a string")
-					}
-					return message, nil
-				},
-			},
-		},
-	})
-	schema, err := graphql.NewSchema(graphql.SchemaConfig{Query: query})
-	if err != nil {
-		panic(err)
-	}
-	return schema
 }
 
 func observeConnection(ctx context.Context, logger *slog.Logger, stats *connectionStats, protocol, route, correlationID string) func() {
@@ -1103,58 +937,5 @@ func (client *wsClient) writePump() {
 				return
 			}
 		}
-	}
-}
-
-func decodeJSONBody(writer http.ResponseWriter, request *http.Request, limit int64, destination interface{}) error {
-	request.Body = http.MaxBytesReader(writer, request.Body, limit)
-	decoder := json.NewDecoder(request.Body)
-	if err := decoder.Decode(destination); err != nil {
-		var maxBytesError *http.MaxBytesError
-		if errors.As(err, &maxBytesError) {
-			http.Error(writer, "request body too large", http.StatusRequestEntityTooLarge)
-			return err
-		}
-		http.Error(writer, "invalid JSON request", http.StatusBadRequest)
-		return err
-	}
-	var extra interface{}
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if err == nil {
-			http.Error(writer, "request body must contain one JSON value", http.StatusBadRequest)
-		} else {
-			http.Error(writer, "invalid JSON request", http.StatusBadRequest)
-		}
-		return err
-	}
-	return nil
-}
-
-func sseIntervalFromEnv() time.Duration {
-	interval, err := time.ParseDuration(os.Getenv("SSE_INTERVAL"))
-	if err != nil || interval <= 0 {
-		return defaultSSEInterval
-	}
-	return interval
-}
-
-func httpListenAddressFromEnv() (string, error) {
-	value := strings.TrimSpace(os.Getenv("HTTP_PORT"))
-	if value == "" {
-		return net.JoinHostPort("", strconv.Itoa(defaultHTTPPort)), nil
-	}
-
-	port, err := strconv.Atoi(value)
-	if err != nil || port < 1 || port > 65535 {
-		return "", fmt.Errorf("HTTP_PORT must be an integer between 1 and 65535, got %q", value)
-	}
-	return net.JoinHostPort("", strconv.Itoa(port)), nil
-}
-
-func writeJSON(writer http.ResponseWriter, statusCode int, payload interface{}) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(statusCode)
-	if err := json.NewEncoder(writer).Encode(payload); err != nil {
-		slog.Error("encode response failed", "event", "response.encode_failed", "error", err)
 	}
 }

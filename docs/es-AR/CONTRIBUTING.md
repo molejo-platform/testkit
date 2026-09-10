@@ -40,8 +40,9 @@ go mod tidy -diff
 - Tratá endpoints, payloads, códigos de salida y comportamiento del contenedor
   como contratos.
 - Mantené los probes puntuales como comandos explícitos y los pares periódicos en
-  una allowlist de solo lectura. Nunca permitas que una solicitud HTTP pública
-  seleccione o active un destino de egreso.
+  una allowlist de solo lectura. Los destinos elegidos en una solicitud requieren
+  capacidad opt-in, autenticación, política estricta, operaciones fijas,
+  ejecución limitada, logs sin secretos y regresiones de seguridad.
 - Conservá el runtime restringido: no root, compatible con filesystem de solo
   lectura, sin capabilities obligatorias y con shutdown limitado.
 - Agregá una prueba de regresión antes de corregir un defecto.

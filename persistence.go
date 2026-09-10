@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -71,10 +72,15 @@ func (store *persistenceStore) handler(writer http.ResponseWriter, request *http
 func (store *persistenceStore) read() (persistenceState, error) {
 	store.mutex.Lock()
 	defer store.mutex.Unlock()
-	data, err := os.ReadFile(store.path)
+	file, err := os.Open(store.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return persistenceState{}, nil
 	}
+	if err != nil {
+		return persistenceState{}, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxPersistenceMarkerBytes+1))
 	if err != nil {
 		return persistenceState{}, err
 	}

@@ -1,0 +1,52 @@
+name: Validate pull request
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TESTKIT_POSTGRES_INTEGRATION_DSN: postgresql://testkit:testkit@127.0.0.1:5432/testkit?sslmode=disable
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: testkit
+          POSTGRES_PASSWORD: testkit
+          POSTGRES_DB: testkit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testkit -d testkit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.7"
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: gofmt -l *.go | tee /tmp/gofmt-files && test ! -s /tmp/gofmt-files
+      - run: go mod tidy -diff
+      - run: go vet ./...
+      - run: go test -race -cover ./...
+      - uses: golang/govulncheck-action@v1.1.0
+        with:
+          go-version-input: "1.26.7"
+          go-package: ./...
+      - run: npm ci
+      - run: npm run test:frontend
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

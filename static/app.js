@@ -2,6 +2,7 @@ import { mountWebSocketClient } from "./ws-ui.js";
 import { mountRestLab } from "./rest-ui.js";
 import { mountGraphQLLab } from "./graphql-ui.js";
 import { mountSSELab } from "./sse-ui.js";
+import { mountPostgresLab } from "./postgres-ui.js";
 import { createTranslator, readPageTranslations } from "./i18n.js";
 
 const page = document.body;
@@ -22,4 +23,8 @@ document.querySelectorAll("[data-graphql-lab]").forEach((lab) => {
 
 document.querySelectorAll("[data-sse-lab]").forEach((lab) => {
   mountSSELab(lab, { locale, translate });
+});
+
+document.querySelectorAll("[data-postgres-lab]").forEach((lab) => {
+  mountPostgresLab(lab, { translate });
 });

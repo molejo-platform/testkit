@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,21 @@ func TestPublicHandlerDoesNotExposeOutboundProbe(t *testing.T) {
 
 	if responseRecorder.Code != http.StatusNotFound {
 		t.Fatalf("status code = %d, want %d", responseRecorder.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandlerAppliesBrowserSecurityHeaders(t *testing.T) {
+	response := httptest.NewRecorder()
+	newHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/en/", nil))
+	for header, expected := range map[string]string{
+		"Content-Security-Policy": "frame-ancestors 'none'",
+		"Referrer-Policy":         "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+	} {
+		if !strings.Contains(response.Header().Get(header), expected) {
+			t.Errorf("%s = %q", header, response.Header().Get(header))
+		}
 	}
 }
 

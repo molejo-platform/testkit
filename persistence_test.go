@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +21,51 @@ func TestPersistenceEndpointIsDisabledWithoutAConfiguredFile(t *testing.T) {
 
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
+func TestPersistenceEndpointRejectsTrailingJSONWithoutChangingState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "marker")
+	store, err := newPersistenceStore(path)
+	if err != nil {
+		t.Fatalf("new persistence store: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("original"), 0o600); err != nil {
+		t.Fatalf("seed marker: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	newHandlerWithConfig(handlerConfig{persistence: store}).ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodPut, "/api/persistence", strings.NewReader(`{"value":"changed"}{}`)),
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	if strings.Contains(response.Body.String(), `"exists"`) {
+		t.Fatalf("response appended success body: %q", response.Body.String())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	if string(data) != "original" {
+		t.Fatalf("marker = %q, want original", data)
+	}
+}
+
+func TestPersistenceStoreLimitsPreexistingMarkerRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "marker")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", maxPersistenceMarkerBytes+1)), 0o600); err != nil {
+		t.Fatalf("seed marker: %v", err)
+	}
+	store, err := newPersistenceStore(path)
+	if err != nil {
+		t.Fatalf("new persistence store: %v", err)
+	}
+	if _, err := store.read(); err == nil {
+		t.Fatal("read succeeded for oversized marker")
 	}
 }
 
@@ -112,5 +159,39 @@ func TestPersistenceEndpointAcceptsEscapedMarkerAtTheByteLimit(t *testing.T) {
 	}
 	if state.Size != maxPersistenceMarkerBytes {
 		t.Fatalf("size = %d, want %d", state.Size, maxPersistenceMarkerBytes)
+	}
+}
+
+func TestPersistenceEndpointRejectsASecondJSONValueWithoutEffects(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "absent", true: "existing"}[existing], func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "marker")
+			if existing {
+				if err := os.WriteFile(path, []byte("original"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			store, err := newPersistenceStore(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			newHandlerWithConfig(handlerConfig{persistence: store}).ServeHTTP(response,
+				httptest.NewRequest(http.MethodPut, "/api/persistence", strings.NewReader(`{"value":"changed"}{}`)))
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d", response.Code)
+			}
+			if strings.Contains(response.Body.String(), `"exists"`) {
+				t.Fatalf("success body appended: %s", response.Body.String())
+			}
+			data, err := os.ReadFile(path)
+			if existing {
+				if err != nil || string(data) != "original" {
+					t.Fatalf("marker changed: %q, %v", data, err)
+				}
+			} else if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("marker created: %q, %v", data, err)
+			}
+		})
 	}
 }

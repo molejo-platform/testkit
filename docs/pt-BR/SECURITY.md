@@ -39,6 +39,21 @@ As respostas expõem apenas tamanho e fingerprint SHA-256, mas qualquer cliente
 com acesso pode substituir o marcador. Não armazene credenciais nem dados
 sensíveis nele.
 
+## Fronteira dos diagnósticos de saída
+
+Diagnósticos PostgreSQL alteram a fronteira de confiança e ficam desabilitados
+por padrão. Habilitá-los exige token operacional e política somente leitura de
+host/CIDR e porta. Autorização inválida, origem estrangeira ou destino fora da
+política são rejeitados antes da rede. A cada tentativa o servidor valida A/AAAA,
+bloqueia loopback, link-local, multicast e endereços não especificados e disca
+somente um IP validado, preservando o hostname para verificar TLS.
+
+Use HTTPS, impeça acesso direto aos targets, aplique egress mínimo e limite
+agregado quando houver réplicas. Operações são fixas, dados são limitados e
+credenciais não são persistidas nem registradas. O token autoriza a implantação,
+não uma pessoa; não oferece RBAC nem protege contra administradores do processo
+ou dos arquivos montados. Remova workloads descartáveis após o uso.
+
 ## Reportando uma vulnerabilidade
 
 O relato privado de vulnerabilidades do GitHub ainda não está habilitado neste

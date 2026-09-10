@@ -269,6 +269,21 @@ func TestCheckPeerIgnoresProxyEnvironment(t *testing.T) {
 	}
 }
 
+func TestCheckPeerUsesNeutralReasonWhenServerAcceptsButDoesNotRespond(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		<-request.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	host, port, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := checkPeer(context.Background(), peer{Name: "target", Scheme: "http", Host: host, Port: mustPort(t, port), ExpectedInstanceID: "target"}, 50*time.Millisecond)
+	if result.Reason != peerReasonRequestTimeout {
+		t.Fatalf("reason = %q", result.Reason)
+	}
+}
+
 func TestCheckPeerRejectsInvalidTLSAndOversizedIdentity(t *testing.T) {
 	t.Run("invalid TLS certificate", func(t *testing.T) {
 		server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -307,8 +322,8 @@ func TestPeerMonitorLogsOnlyStateChangesAndSanitizesFailures(t *testing.T) {
 	monitor := newPeerMonitor(configuration, newUUIDv7(), logger)
 	var mutex sync.Mutex
 	results := []peerCheckResult{
-		{Outcome: peerUnreachable, Reason: peerReasonConnectTimeout, Detail: "dial secret.internal:8080: token=sensitive"},
-		{Outcome: peerUnreachable, Reason: peerReasonConnectTimeout, Detail: "different raw error"},
+		{Outcome: peerUnreachable, Reason: peerReasonRequestTimeout, Detail: "dial secret.internal:8080: token=sensitive"},
+		{Outcome: peerUnreachable, Reason: peerReasonRequestTimeout, Detail: "different raw error"},
 		{Outcome: peerReachable, Reason: peerReasonOK, ObservedInstanceID: "target"},
 	}
 	monitor.check = func(context.Context, peer, time.Duration) peerCheckResult {

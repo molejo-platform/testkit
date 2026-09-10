@@ -281,6 +281,9 @@ connections are rejected.
 | `SSE_INTERVAL` | `1s` | Interval between SSE status events. |
 | `TESTKIT_PEERS_FILE` | unset | Read-only peer configuration; unset disables peer monitoring and its HTTP endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | unset | Absolute marker file path; unset disables the persistence endpoint. |
+| `TESTKIT_SMOKES` | `transport` | Comma-separated capabilities. The only additional value is `postgres`; unknown values fail startup. |
+| `TESTKIT_DIAGNOSTIC_TOKEN_FILE` | unset | Read-only operational token file required when `postgres` is enabled. |
+| `TESTKIT_POSTGRES_DESTINATIONS_FILE` | unset | Read-only destination policy required when `postgres` is enabled. |
 
 Unset or empty `HTTP_PORT` uses the default. Invalid values make the server fail
 at startup. Invalid or non-positive `SSE_INTERVAL` values fall back to the default.
@@ -289,6 +292,25 @@ with 1–4096 bytes and writes it atomically. `GET` and `PUT` return only whethe
 the marker exists, its byte size, and its SHA-256 fingerprint; the marker value
 is never returned. Mount a writable persistent volume at the configured file's
 parent directory when using a read-only root filesystem.
+
+PostgreSQL diagnostics are opt-in. Enable them with
+`TESTKIT_SMOKES=transport,postgres` and mount both required files. The policy is
+strict JSON, for example:
+
+```json
+{"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
+```
+
+The browser sends the deployment token in `Authorization: Bearer ...` and keeps
+the token and database credentials only in page memory. The API exposes only
+`connect`, `arithmetic_check`, `list_databases`, and `list_schemas`; it accepts no
+SQL. Every operation uses a new connection, a 10-second total deadline, no retry,
+and at most four concurrent executions per process. URI and separate-field modes
+are mutually exclusive. TLS defaults to `verify-full`; disabling it is explicit.
+The API rejects unknown URI parameters, loopback, link-local (including
+cloud/container metadata), multicast, and unspecified addresses before
+connecting. Private destinations remain available only when the deployment
+policy explicitly allows them. Serve this page exclusively over HTTPS.
 
 ## Structured logs
 
@@ -366,7 +388,9 @@ gofmt -w *.go
 go test -race -cover ./...
 go vet ./...
 go mod tidy -diff
-node --test frontend-tests/ws-client.test.mjs frontend-tests/ws-ui.test.mjs
+npm ci
+npm run test:frontend
+npm run test:browser
 ```
 
 Build and exercise the final container whenever runtime, embedded assets, probes,

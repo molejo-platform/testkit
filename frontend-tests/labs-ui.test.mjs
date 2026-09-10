@@ -88,11 +88,17 @@ function createHTTPRoot(prefix, names = ["status", "items", "echo", "invalid"]) 
   };
   if (prefix === "rest") {
     selectors["[data-rest-send]"] = new FakeElement();
+	selectors["[data-rest-cancel]"] = new FakeElement();
     selectors["[data-rest-output]"] = new FakeElement();
     selectors["[data-rest-size]"] = new FakeElement();
     selectors["[data-rest-version]"] = new FakeElement();
     selectors["[data-rest-correlation-id]"] = new FakeElement();
   }
+	if (prefix === "graphql") {
+	  selectors["[data-graphql-send]"] = new FakeElement();
+	  selectors["[data-graphql-cancel]"] = new FakeElement();
+	  selectors["[data-graphql-output]"] = new FakeElement();
+	}
   return rootFor(selectors, { [`[data-${prefix}-preset]`]: buttons });
 }
 
@@ -332,7 +338,7 @@ test("REST sends the selected request with the standard keyboard shortcut", asyn
   assert.deepEqual(calls, ["/api/items"]);
 });
 
-test("GraphQL presets preserve query variables and expose GraphQL errors", async () => {
+test("GraphQL presets require an explicit run and treat expected errors as a passing scenario", async () => {
   const root = createHTTPRoot("graphql", ["status", "echo", "invalid"]);
   const calls = [];
   const fetchImpl = async (_path, options) => {
@@ -348,6 +354,8 @@ test("GraphQL presets preserve query variables and expose GraphQL errors", async
 
   mountGraphQLLab(root, { fetchImpl, translate: labTranslator });
   root.collections.get("[data-graphql-preset]")[1].dispatch("click");
+	assert.equal(calls.length, 0);
+	root.controls.get("[data-graphql-send]").dispatch("click");
   await new Promise((resolve) => setImmediate(resolve));
 
   const payload = JSON.parse(calls[0].body);
@@ -356,8 +364,11 @@ test("GraphQL presets preserve query variables and expose GraphQL errors", async
   assert.deepEqual(payload.variables, { message: "hello from GraphQL" });
 
   root.collections.get("[data-graphql-preset]")[2].dispatch("click");
+	root.controls.get("[data-graphql-send]").dispatch("click");
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(root.controls.get("[data-graphql-response]").textContent, /errors/);
+	assert.equal(root.controls.get("[data-graphql-status]").textContent, "graphql.expected_error");
+	assert.match(root.controls.get("[data-graphql-status]").className, /--ok/);
 });
 
 class FakeEventSource {

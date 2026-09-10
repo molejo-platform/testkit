@@ -28,20 +28,24 @@
       <aside class="preset-panel" aria-label="{{ .T "graphql.presets_title" }}">
         <p class="preset-panel__label">{{ .T "lab.scenarios" }}</p>
         <div class="preset-list">
-          <button class="preset-button preset-button--active" type="button" data-graphql-preset="status">{{ .T "graphql.preset_status" }}</button>
-          <button class="preset-button" type="button" data-graphql-preset="echo">{{ .T "graphql.preset_echo" }}</button>
-          <button class="preset-button" type="button" data-graphql-preset="invalid">{{ .T "graphql.preset_invalid" }}</button>
+		  <button class="preset-button preset-button--active" type="button" aria-pressed="true" data-graphql-preset="status">{{ .T "graphql.preset_status" }}</button>
+          <button class="preset-button" type="button" aria-pressed="false" data-graphql-preset="echo">{{ .T "graphql.preset_echo" }}</button>
+          <button class="preset-button" type="button" aria-pressed="false" data-graphql-preset="invalid">{{ .T "graphql.preset_invalid" }}</button>
         </div>
         <p class="field-hint" data-graphql-hint>{{ .T "graphql.hint" }}</p>
       </aside>
 
-      <article class="lab-output" aria-live="polite">
+	  <article class="lab-output" data-graphql-output aria-busy="false">
         <header class="lab-output__header">
           <div>
             <p class="preset-panel__label">{{ .T "lab.request" }}</p>
             <code data-graphql-request-line>POST /graphql</code>
           </div>
-          <span class="lab-result-status" data-graphql-status>{{ .T "lab.waiting" }}</span>
+		  <div class="lab-output__header-actions">
+			<span class="lab-result-status" role="status" aria-live="polite" data-graphql-status>{{ .T "lab.waiting" }}</span>
+			<button class="button button--secondary" type="button" data-graphql-cancel hidden>{{ .T "lab.cancel" }}</button>
+			<button class="button button--primary" type="button" aria-keyshortcuts="Control+Enter Meta+Enter" data-graphql-send>{{ .T "graphql.send" }}</button>
+		  </div>
         </header>
         <div class="lab-output__grid">
           <section class="code-panel">

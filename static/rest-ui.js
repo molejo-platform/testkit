@@ -1,4 +1,5 @@
 import { createCorrelationID } from "./correlation-id.js";
+import { createFiniteRequestExecutor } from "./finite-request.js";
 
 const presets = {
   status: { method: "GET", path: "/api/status" },
@@ -20,9 +21,11 @@ export function mountRestLab(root, {
   fetchImpl = globalThis.fetch,
   createCorrelationIDImpl = createCorrelationID,
   now = () => globalThis.performance.now(),
+	timeoutMS = 10_000,
 } = {}) {
   const buttons = [...root.querySelectorAll("[data-rest-preset]")];
   const sendButton = root.querySelector("[data-rest-send]");
+	const cancelButton = root.querySelector("[data-rest-cancel]");
   const output = root.querySelector("[data-rest-output]");
   const requestLine = root.querySelector("[data-rest-request-line]");
   const status = root.querySelector("[data-rest-status]");
@@ -34,6 +37,7 @@ export function mountRestLab(root, {
   const version = root.querySelector("[data-rest-version]");
   const correlationIDOutput = root.querySelector("[data-rest-correlation-id]");
   const hint = root.querySelector("[data-rest-hint]");
+	const executor = createFiniteRequestExecutor({ fetchImpl, timeoutMS });
   let selectedName = buttons.find((button) => button.className.includes("preset-button--active"))?.dataset.restPreset || "status";
   let running = false;
 
@@ -81,6 +85,7 @@ export function mountRestLab(root, {
   function setRunning(nextRunning) {
     running = nextRunning;
     sendButton.disabled = nextRunning;
+	cancelButton.hidden = !nextRunning;
     sendButton.textContent = translate(nextRunning ? "rest.sending" : "rest.send");
     output.setAttribute("aria-busy", String(nextRunning));
     for (const button of buttons) button.disabled = nextRunning;
@@ -119,11 +124,19 @@ export function mountRestLab(root, {
       correlationIDOutput.textContent = correlationID;
       const headers = { "X-Testkit-Correlation-ID": correlationID };
       if (preset.body) headers["Content-Type"] = "application/json";
-      const response = await fetchImpl(preset.path, {
+	  const execution = await executor.execute(preset.path, {
         method: preset.method,
         headers,
         body: preset.body,
       });
+	  if (execution.stale) return;
+	  if (execution.aborted) {
+		status.className = "lab-result-status lab-result-status--error";
+		status.textContent = translate(`lab.${execution.reason}`);
+		hint.textContent = translate(`rest.${execution.reason}`);
+		return;
+	  }
+	  const response = execution.response;
       const body = await response.text();
       duration.textContent = durationSince(started);
       size.textContent = `${new TextEncoder().encode(body).byteLength} B`;
@@ -146,8 +159,17 @@ export function mountRestLab(root, {
     }
   }
 
+	function cancel() {
+	  if (!executor.cancel()) return;
+	  status.className = "lab-result-status lab-result-status--error";
+	  status.textContent = translate("lab.cancelled");
+	  hint.textContent = translate("rest.cancelled");
+	  setRunning(false);
+	}
+
   for (const button of buttons) button.addEventListener("click", () => select(button.dataset.restPreset));
   sendButton.addEventListener("click", run);
+	cancelButton.addEventListener("click", cancel);
   root.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();

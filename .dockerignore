@@ -8,3 +8,9 @@ README.md
 SECURITY.md
 *_test.go
 docs
+frontend-tests
+node_modules
+package*.json
+playwright.config.mjs
+reports
+test-results

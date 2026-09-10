@@ -39,6 +39,21 @@ archivos. Las respuestas exponen solo tamaño y fingerprint SHA-256, pero
 cualquier cliente con acceso puede reemplazar el marcador. No almacenes
 credenciales ni datos sensibles en él.
 
+## Límite de los diagnósticos de salida
+
+Los diagnósticos PostgreSQL cambian el límite de confianza y están deshabilitados
+por defecto. Habilitarlos requiere un token operativo y una política de solo
+lectura de host/CIDR y puerto. Autorización inválida, origen extranjero o destino
+fuera de política se rechazan antes de acceder a la red. En cada intento el
+servidor valida A/AAAA, bloquea loopback, link-local, multicast y direcciones no
+especificadas, y marca solo una IP validada, conservando el hostname para TLS.
+
+Usá HTTPS, impedí acceso directo a los targets, aplicá egress mínimo y un límite
+agregado si existen réplicas. Las operaciones son fijas, los datos están limitados
+y las credenciales no se persisten ni registran. El token autoriza la instalación,
+no una persona; no ofrece RBAC ni protege frente a los administradores del proceso
+o de los archivos montados. Eliminá workloads descartables al terminar.
+
 ## Reportar una vulnerabilidad
 
 El reporte privado de vulnerabilidades de GitHub todavía no está habilitado en

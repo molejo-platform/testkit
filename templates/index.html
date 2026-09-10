@@ -15,6 +15,21 @@
     </div>
   </section>
 
+  {{ if .DatabaseProviders }}
+  <section class="protocol-overview" aria-labelledby="databases-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">{{ .T "home.databases" }}</p>
+        <h2 id="databases-title">{{ .T "home.database_diagnostics" }}</h2>
+      </div>
+      <span class="section-count">{{ len .DatabaseProviders }} {{ .T "home.active" }}</span>
+    </div>
+    <div class="protocol-grid">
+      {{ range .DatabaseProviders }}{{ template "protocol-card" . }}{{ end }}
+    </div>
+  </section>
+  {{ end }}
+
   <section class="protocol-overview" aria-labelledby="protocols-title">
     <div class="section-heading">
       <div>

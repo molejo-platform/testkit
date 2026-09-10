@@ -44,6 +44,7 @@
           </div>
           <div class="lab-output__header-actions">
             <span class="lab-result-status" role="status" aria-live="polite" data-rest-status>{{ .T "lab.waiting" }}</span>
+            <button class="button button--secondary" type="button" data-rest-cancel hidden>{{ .T "lab.cancel" }}</button>
             <button class="button button--primary" type="button" aria-keyshortcuts="Control+Enter Meta+Enter" data-rest-send>{{ .T "rest.send" }}</button>
           </div>
         </header>

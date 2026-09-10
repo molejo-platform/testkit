@@ -40,8 +40,9 @@ go mod tidy -diff
 - Trate endpoints, payloads, códigos de saída e comportamento do contêiner como
   contratos.
 - Mantenha probes pontuais como comandos explícitos e pares periódicos em uma
-  allowlist read-only. Nunca permita que uma requisição HTTP pública selecione ou
-  acione um destino de saída.
+  allowlist read-only. Destinos de diagnóstico escolhidos na requisição exigem
+  capacidade opt-in, autenticação, política estrita, operações fixas, execução
+  limitada, logs sem segredos e regressões de segurança.
 - Preserve o runtime restrito: não root, compatível com filesystem somente
   leitura, sem capabilities obrigatórias e com shutdown limitado.
 - Adicione um teste de regressão antes de corrigir um defeito.

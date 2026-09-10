@@ -288,6 +288,9 @@ cross-origin de navegadores son rechazadas.
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de estado SSE. |
 | `TESTKIT_PEERS_FILE` | no definido | Configuración de solo lectura; ausente deshabilita el monitor y sus endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | no definido | Ruta absoluta del marcador; ausente deshabilita el endpoint de persistencia. |
+| `TESTKIT_SMOKES` | `transport` | Capacidades separadas por coma. El único valor adicional es `postgres`; valores desconocidos impiden el inicio. |
+| `TESTKIT_DIAGNOSTIC_TOKEN_FILE` | no definido | Archivo de solo lectura con el token operativo requerido cuando `postgres` está habilitado. |
+| `TESTKIT_POSTGRES_DESTINATIONS_FILE` | no definido | Política de destinos de solo lectura requerida cuando `postgres` está habilitado. |
 
 Si `HTTP_PORT` no está definido o está vacío, se usa el valor predeterminado.
 Los valores inválidos hacen que el servidor falle durante el inicio. Los valores
@@ -297,6 +300,24 @@ Cuando la persistencia está habilitada, `PUT /api/persistence` acepta
 devuelven únicamente existencia, tamaño en bytes y fingerprint SHA-256; el valor
 nunca se devuelve. Monte un volumen persistente escribible en el directorio padre
 del archivo al usar un filesystem raíz de solo lectura.
+
+Los diagnósticos PostgreSQL son opt-in. Habilitalos con
+`TESTKIT_SMOKES=transport,postgres` y montá ambos archivos obligatorios. La
+política usa JSON estricto, por ejemplo:
+
+```json
+{"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
+```
+
+El navegador envía el token mediante `Authorization: Bearer ...` y mantiene el
+token y las credenciales solo en memoria. La API expone únicamente `connect`,
+`arithmetic_check`, `list_databases` y `list_schemas`; no acepta SQL. Cada
+operación abre una conexión nueva, tiene un plazo total de 10 segundos, no
+reintenta y admite como máximo cuatro ejecuciones concurrentes por proceso. URI
+y campos separados son mutuamente exclusivos. TLS usa `verify-full` de forma
+predeterminada; deshabilitarlo es explícito. Los destinos especiales, incluida la
+metadata cloud/container, se rechazan antes de conectar. Serví esta página solo
+mediante HTTPS.
 
 ## Logs estructurados
 
@@ -381,6 +402,9 @@ gofmt -w *.go
 go test -race -cover ./...
 go vet ./...
 go mod tidy -diff
+npm ci
+npm run test:frontend
+npm run test:browser
 ```
 
 Construí y ejercitá el contenedor final siempre que cambien el runtime, los assets

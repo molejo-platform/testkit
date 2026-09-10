@@ -1,0 +1,54 @@
+{{ define "content" -}}
+<main id="main-content" class="page-content page-content--lab" data-lab="postgres">
+  {{ template "breadcrumbs" . }}
+  <section class="hero hero--compact" aria-labelledby="page-title">
+    <div class="hero-copy">
+      <p class="eyebrow accent-text">{{ .T "postgres.eyebrow" }}</p>
+      <h1 id="page-title">PostgreSQL <em>{{ .T "postgres.title_emphasis" }}</em></h1>
+      <p class="hero-lede">{{ .T "postgres.lede" }}</p>
+    </div>
+    <a class="button button--secondary hero-back" href="{{ .HomeURL }}">{{ .T "lab.back" }}</a>
+  </section>
+
+  <section class="lab-section lab-section--first" aria-labelledby="postgres-lab-title" data-postgres-lab>
+    <div class="section-heading section-heading--lab">
+      <div><p class="eyebrow">{{ .T "postgres.surface" }}</p><h2 id="postgres-lab-title">{{ .T "postgres.configure" }}</h2><p class="section-description">{{ .T "postgres.description" }}</p></div>
+      <div class="lab-contract"><span>{{ .T "lab.contract" }}</span><code>{{ .LabEndpoint }}</code></div>
+    </div>
+
+    <form class="diagnostic-form" data-postgres-form>
+      <fieldset><legend>{{ .T "postgres.access" }}</legend><label>{{ .T "postgres.token" }}<input type="password" name="token" autocomplete="off" required></label></fieldset>
+      <fieldset>
+        <legend>{{ .T "postgres.connection" }}</legend>
+        <div class="form-choice"><label><input type="radio" name="mode" value="fields" checked> {{ .T "postgres.mode_fields" }}</label><label><input type="radio" name="mode" value="uri"> URI</label></div>
+        <div class="form-grid" data-postgres-fields>
+          <label>{{ .T "postgres.host" }}<input name="host" autocomplete="off"></label>
+          <label>{{ .T "postgres.port" }}<input name="port" type="number" min="1" max="65535" value="5432"></label>
+          <label>{{ .T "postgres.user" }}<input name="user" autocomplete="username"></label>
+          <label>{{ .T "postgres.password" }}<input name="password" type="password" autocomplete="current-password"></label>
+          <label>{{ .T "postgres.database" }}<input name="database" value="postgres" autocomplete="off"></label>
+          <label>TLS<select name="tls"><option value="verify-full">verify-full</option><option value="disable">{{ .T "postgres.tls_disable" }}</option></select></label>
+        </div>
+        <label data-postgres-uri hidden>URI<input name="uri" type="password" autocomplete="off" placeholder="postgresql://user:password@host:5432/postgres"></label>
+        <label>{{ .T "postgres.ca" }}<textarea name="ca_pem" rows="4" spellcheck="false"></textarea></label>
+      </fieldset>
+      <fieldset>
+        <legend>{{ .T "postgres.operations" }}</legend>
+        <div class="diagnostic-actions">
+          <button class="button button--primary" type="button" data-postgres-operation="connect">{{ .T "postgres.connect" }}</button>
+          <button class="button button--secondary" type="button" data-postgres-operation="arithmetic_check">SELECT 1 + 1</button>
+          <button class="button button--secondary" type="button" data-postgres-operation="list_databases">{{ .T "postgres.list_databases" }}</button>
+          <button class="button button--secondary" type="button" data-postgres-operation="list_schemas">{{ .T "postgres.list_schemas" }}</button>
+          <button class="button button--secondary" type="button" data-postgres-cancel hidden>{{ .T "lab.cancel" }}</button>
+          <button class="button button--secondary" type="button" data-postgres-clear>{{ .T "postgres.clear" }}</button>
+        </div>
+      </fieldset>
+    </form>
+    <article class="lab-output diagnostic-output" data-postgres-output aria-busy="false">
+      <header class="lab-output__header"><div><p class="preset-panel__label">{{ .T "postgres.effective_target" }}</p><code data-postgres-summary>—</code></div><span class="lab-result-status" role="status" aria-live="polite" data-postgres-status>{{ .T "lab.waiting" }}</span></header>
+      <section class="code-panel"><h3>{{ .T "lab.response" }}</h3><pre data-postgres-response>{{ .T "lab.run_to_see" }}</pre></section>
+    </article>
+  </section>
+  {{ template "page-footer" . }}
+</main>
+{{- end }}

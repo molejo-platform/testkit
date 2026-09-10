@@ -283,6 +283,9 @@ navegadores são rejeitadas.
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de status SSE. |
 | `TESTKIT_PEERS_FILE` | não definido | Configuração somente leitura; ausente desabilita o monitor e seus endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | não definido | Caminho absoluto do marcador; ausente desabilita o endpoint de persistência. |
+| `TESTKIT_SMOKES` | `transport` | Capacidades separadas por vírgula. O único valor adicional é `postgres`; valores desconhecidos impedem a inicialização. |
+| `TESTKIT_DIAGNOSTIC_TOKEN_FILE` | não definido | Arquivo somente leitura com o token operacional exigido quando `postgres` está habilitado. |
+| `TESTKIT_POSTGRES_DESTINATIONS_FILE` | não definido | Política somente leitura de destinos exigida quando `postgres` está habilitado. |
 
 `HTTP_PORT` ausente ou vazio usa o padrão. Valores inválidos fazem o servidor
 falhar durante a inicialização. Valores inválidos ou não positivos de
@@ -292,6 +295,23 @@ Quando a persistência está habilitada, `PUT /api/persistence` aceita
 retornam somente existência, tamanho em bytes e fingerprint SHA-256; o valor
 nunca é devolvido. Monte um volume persistente gravável no diretório pai do
 arquivo ao usar filesystem raiz somente leitura.
+
+Os diagnósticos PostgreSQL são opt-in. Habilite com
+`TESTKIT_SMOKES=transport,postgres` e monte os dois arquivos obrigatórios. A
+política usa JSON estrito, por exemplo:
+
+```json
+{"destinations":[{"host":"db.internal.example","ports":[5432]},{"cidr":"10.20.0.0/24","ports":[5432]}]}
+```
+
+O browser envia o token em `Authorization: Bearer ...` e mantém token e
+credenciais do banco apenas na memória da página. A API expõe somente `connect`,
+`arithmetic_check`, `list_databases` e `list_schemas`; não aceita SQL. Cada
+operação abre uma nova conexão, tem prazo total de 10 segundos, não faz retry e
+há no máximo quatro execuções concorrentes por processo. URI e campos separados
+são mutuamente exclusivos. TLS usa `verify-full` por padrão; desabilitá-lo é uma
+escolha explícita. Destinos especiais, incluindo metadata cloud/container, são
+rejeitados antes da conexão. Sirva esta página exclusivamente por HTTPS.
 
 ## Logs estruturados
 
@@ -372,6 +392,9 @@ gofmt -w *.go
 go test -race -cover ./...
 go vet ./...
 go mod tidy -diff
+npm ci
+npm run test:frontend
+npm run test:browser
 ```
 
 Construa e exercite o contêiner final sempre que runtime, assets incorporados,
