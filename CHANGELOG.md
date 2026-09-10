@@ -7,7 +7,50 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-No changes yet.
+Candidate `0.9.0-rc.1` is prepared on its release branch for validation. It has
+not been tagged or published, and the repository version remains at the latest
+stable release until promotion.
+
+### Added
+
+- Added an opt-in PostgreSQL diagnostic laboratory with fixed read-only
+  operations for connectivity, arithmetic, database listing, and schema
+  listing.
+- Added backend-controlled capability discovery, token-file authentication,
+  and a read-only destination policy for diagnostic targets.
+- Added browser-level Playwright coverage and a pull-request workflow covering
+  Go, frontend, browser, PostgreSQL integration, and vulnerability checks.
+
+### Changed
+
+- REST and GraphQL laboratories now use explicit finite executions with
+  deadlines, cancellation, duplicate-submit protection, and stale-response
+  disposal.
+- GraphQL presets now require explicit execution and distinguish expected
+  GraphQL errors from transport failures.
+- Split runtime configuration, REST, GraphQL, and shared HTTP helpers out of
+  the main server module without changing the existing public routes.
+- Expanded localized documentation and browser content for the PostgreSQL
+  diagnostic workflow and its trust boundary.
+
+### Fixed
+
+- JSON request parsing now rejects trailing values before persistence or other
+  observable effects occur.
+- Persistence reads are bounded, and peer request timeouts use a neutral reason
+  that does not misclassify the failure stage.
+
+### Security
+
+- Diagnostic destinations are re-resolved for every attempt, checked against
+  the configured allowlist, rejected for special local/link addresses, and
+  pinned to the validated IP while preserving TLS hostname verification.
+- Arbitrary SQL, inherited PostgreSQL credential files, redirects, cross-origin
+  browser requests, oversized inputs, secret echoing, and unbounded diagnostic
+  concurrency are rejected.
+- Added non-cacheable diagnostic responses, browser security headers, request
+  rate limits, execution deadlines, result limits, and local source/binary
+  vulnerability gates.
 
 ## [0.8.0] - 2026-09-10
 
