@@ -1460,6 +1460,43 @@ func TestSSEIntervalFromEnv(t *testing.T) {
 	}
 }
 
+func TestHTTPListenAddressFromEnv(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty", value: "", want: ":8080"},
+		{name: "custom port", value: "2020", want: ":2020"},
+		{name: "trimmed custom port", value: " 2020 ", want: ":2020"},
+		{name: "minimum port", value: "1", want: ":1"},
+		{name: "maximum port", value: "65535", want: ":65535"},
+		{name: "not a number", value: "invalid", wantErr: true},
+		{name: "zero", value: "0", wantErr: true},
+		{name: "negative", value: "-1", wantErr: true},
+		{name: "above maximum", value: "65536", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("HTTP_PORT", test.value)
+
+			got, err := httpListenAddressFromEnv()
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("http listen address = %q, want an error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("httpListenAddressFromEnv() error = %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("http listen address = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestGraphQLRejectsInvalidJSON(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader("{"))
 	responseRecorder := httptest.NewRecorder()

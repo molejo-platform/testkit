@@ -84,6 +84,25 @@ Expected response:
 {"status":"ok","version":"v0.7.1"}
 ```
 
+To run the server on another port, set `HTTP_PORT`. It defaults to `8080`:
+
+```sh
+HTTP_PORT=2020 go run .
+curl --fail http://localhost:2020/api/status
+```
+
+For the container, configure the same port inside and outside the container:
+
+```sh
+docker run --rm \
+  --env HTTP_PORT=2020 \
+  --publish 2020:2020 \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  molejo-testkit:dev
+```
+
 ## Browser console
 
 Open `http://localhost:8080/` to let the server detect the browser language, or
@@ -200,7 +219,7 @@ Service, not to one specific Pod.
 
 ## Container contract
 
-- Listens on TCP port `8080`.
+- Listens on TCP port `8080` by default; `HTTP_PORT` can override it at runtime.
 - Runs as UID/GID `65532:65532`.
 - Supports a read-only root filesystem.
 - Requires no Linux capabilities or privilege escalation.
@@ -219,11 +238,13 @@ connections are rejected.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `HTTP_PORT` | `8080` | TCP port used by the HTTP server; must be an integer from `1` to `65535`. |
 | `SSE_INTERVAL` | `1s` | Interval between SSE status events. |
 | `TESTKIT_PEERS_FILE` | unset | Read-only peer configuration; unset disables peer monitoring and its HTTP endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | unset | Absolute marker file path; unset disables the persistence endpoint. |
 
-Invalid or non-positive `SSE_INTERVAL` values fall back to the default.
+Unset or empty `HTTP_PORT` uses the default. Invalid values make the server fail
+at startup. Invalid or non-positive `SSE_INTERVAL` values fall back to the default.
 When persistence is enabled, `PUT /api/persistence` accepts `{"value":"..."}`
 with 1–4096 bytes and writes it atomically. `GET` and `PUT` return only whether
 the marker exists, its byte size, and its SHA-256 fingerprint; the marker value

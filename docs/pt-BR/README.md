@@ -84,6 +84,25 @@ Resposta esperada:
 {"status":"ok","version":"v0.7.1"}
 ```
 
+Para executar o servidor em outra porta, defina `HTTP_PORT`. O padrão é `8080`:
+
+```sh
+HTTP_PORT=2020 go run .
+curl --fail http://localhost:2020/api/status
+```
+
+No contêiner, configure a mesma porta dentro e fora do contêiner:
+
+```sh
+docker run --rm \
+  --env HTTP_PORT=2020 \
+  --publish 2020:2020 \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  molejo-testkit:dev
+```
+
 ## Console no navegador
 
 Abra `http://localhost:8080/` para detectar o idioma do navegador ou use
@@ -202,7 +221,7 @@ não a um Pod específico.
 
 ## Contrato do contêiner
 
-- Escuta na porta TCP `8080`.
+- Escuta na porta TCP `8080` por padrão; `HTTP_PORT` pode substituí-la em runtime.
 - Executa como UID/GID `65532:65532`.
 - Suporta filesystem raiz somente leitura.
 - Não exige capabilities Linux nem elevação de privilégios.
@@ -220,11 +239,14 @@ navegadores são rejeitadas.
 
 | Variável | Padrão | Finalidade |
 | --- | --- | --- |
+| `HTTP_PORT` | `8080` | Porta TCP usada pelo servidor HTTP; deve ser um inteiro entre `1` e `65535`. |
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de status SSE. |
 | `TESTKIT_PEERS_FILE` | não definido | Configuração somente leitura; ausente desabilita o monitor e seus endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | não definido | Caminho absoluto do marcador; ausente desabilita o endpoint de persistência. |
 
-Valores inválidos ou não positivos de `SSE_INTERVAL` usam o padrão.
+`HTTP_PORT` ausente ou vazio usa o padrão. Valores inválidos fazem o servidor
+falhar durante a inicialização. Valores inválidos ou não positivos de
+`SSE_INTERVAL` usam o padrão.
 Quando a persistência está habilitada, `PUT /api/persistence` aceita
 `{"value":"..."}` com 1–4096 bytes e grava de forma atômica. `GET` e `PUT`
 retornam somente existência, tamanho em bytes e fingerprint SHA-256; o valor

@@ -85,6 +85,26 @@ Respuesta esperada:
 {"status":"ok","version":"v0.7.1"}
 ```
 
+Para ejecutar el servidor en otro puerto, definí `HTTP_PORT`. El valor
+predeterminado es `8080`:
+
+```sh
+HTTP_PORT=2020 go run .
+curl --fail http://localhost:2020/api/status
+```
+
+En el contenedor, configurá el mismo puerto dentro y fuera del contenedor:
+
+```sh
+docker run --rm \
+  --env HTTP_PORT=2020 \
+  --publish 2020:2020 \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  molejo-testkit:dev
+```
+
 ## Consola del navegador
 
 Abra `http://localhost:8080/` para detectar el idioma del navegador o use
@@ -204,7 +224,8 @@ no a un Pod específico.
 
 ## Contrato del contenedor
 
-- Escucha en el puerto TCP `8080`.
+- Escucha en el puerto TCP `8080` de forma predeterminada; `HTTP_PORT` puede
+  sobrescribirlo en runtime.
 - Se ejecuta como UID/GID `65532:65532`.
 - Admite un filesystem raíz de solo lectura.
 - No requiere capabilities Linux ni escalamiento de privilegios.
@@ -223,12 +244,14 @@ cross-origin de navegadores son rechazadas.
 
 | Variable | Valor predeterminado | Finalidad |
 | --- | --- | --- |
+| `HTTP_PORT` | `8080` | Puerto TCP usado por el servidor HTTP; debe ser un entero entre `1` y `65535`. |
 | `SSE_INTERVAL` | `1s` | Intervalo entre eventos de estado SSE. |
 | `TESTKIT_PEERS_FILE` | no definido | Configuración de solo lectura; ausente deshabilita el monitor y sus endpoints. |
 | `TESTKIT_PERSISTENCE_FILE` | no definido | Ruta absoluta del marcador; ausente deshabilita el endpoint de persistencia. |
 
-Los valores inválidos o no positivos de `SSE_INTERVAL` usan el valor
-predeterminado.
+Si `HTTP_PORT` no está definido o está vacío, se usa el valor predeterminado.
+Los valores inválidos hacen que el servidor falle durante el inicio. Los valores
+inválidos o no positivos de `SSE_INTERVAL` usan el valor predeterminado.
 Cuando la persistencia está habilitada, `PUT /api/persistence` acepta
 `{"value":"..."}` con 1–4096 bytes y lo escribe de forma atómica. `GET` y `PUT`
 devuelven únicamente existencia, tamaño en bytes y fingerprint SHA-256; el valor

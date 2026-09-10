@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,6 +33,7 @@ const (
 	maxJSONBodyBytes         = 64 * 1024
 	maxGraphQLBodyBytes      = 16 * 1024
 	maxWebSocketBytes        = 4 * 1024
+	defaultHTTPPort          = 8080
 	defaultSSEInterval       = time.Second
 	connectionReportInterval = 15 * time.Minute
 	shutdownTimeout          = 5 * time.Second
@@ -256,6 +258,11 @@ func main() {
 	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	listenAddress, err := httpListenAddressFromEnv()
+	if err != nil {
+		logger.ErrorContext(ctx, "server port configuration failed", "event", "server.port_configuration_failed", "error", err)
+		os.Exit(1)
+	}
 	peerMonitor, err := loadPeerMonitorFromEnv(logger)
 	if err != nil {
 		logger.ErrorContext(ctx, "peer configuration failed", "event", "peers.configuration_failed", "error", err)
@@ -269,7 +276,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	listener, err := net.Listen("tcp", ":8080")
+	listener, err := net.Listen("tcp", listenAddress)
 	if err != nil {
 		logger.ErrorContext(ctx, "server listen failed", "event", "server.listen_failed", "error", err)
 		os.Exit(1)
@@ -1117,6 +1124,19 @@ func sseIntervalFromEnv() time.Duration {
 		return defaultSSEInterval
 	}
 	return interval
+}
+
+func httpListenAddressFromEnv() (string, error) {
+	value := strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	if value == "" {
+		return net.JoinHostPort("", strconv.Itoa(defaultHTTPPort)), nil
+	}
+
+	port, err := strconv.Atoi(value)
+	if err != nil || port < 1 || port > 65535 {
+		return "", fmt.Errorf("HTTP_PORT must be an integer between 1 and 65535, got %q", value)
+	}
+	return net.JoinHostPort("", strconv.Itoa(port)), nil
 }
 
 func writeJSON(writer http.ResponseWriter, statusCode int, payload interface{}) {

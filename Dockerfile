@@ -20,6 +20,7 @@ USER 65532:65532
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/testkit /testkit
 
+# HTTP_PORT overrides this default at runtime.
 EXPOSE 8080
 
 ENTRYPOINT ["/testkit"]
