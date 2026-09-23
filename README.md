@@ -26,11 +26,11 @@ ghcr.io/molejo-platform/testkit
 Set the image once before following the examples:
 
 ```sh
-export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.8.0
+export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.9.0
 docker pull "$TESTKIT_IMAGE"
 ```
 
-`v0.8.0` is the latest published stable image at the time this guide was
+`v0.9.0` is the latest published stable image at the time this guide was
 written. A release branch may document unreleased capabilities before a matching
 image exists. For automated environments, replace the tag with the immutable
 digest published by the release:
@@ -75,7 +75,7 @@ curl --fail http://localhost:8080/api/status
 The status response includes the exact version embedded in the image:
 
 ```json
-{"status":"ok","version":"v0.8.0"}
+{"status":"ok","version":"v0.9.0"}
 ```
 
 ### 3. Open the browser console
@@ -326,9 +326,8 @@ PostgreSQL diagnostics are opt-in and require two files: an operational API toke
 and an allowlist of destinations. The deployment token is separate from the
 database credential entered for a diagnostic.
 
-This capability is not present in the published `v0.8.0` image used by the quick
-start. Use a future tag or digest that includes PostgreSQL diagnostics, or build
-the current release candidate as described in the contributor guide.
+This capability is included in `v0.9.0` and remains disabled until the required
+token and destination policy are configured explicitly.
 
 ### 1. Create local configuration files
 
@@ -456,7 +455,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: testkit
-          image: ghcr.io/molejo-platform/testkit:v0.8.0
+          image: ghcr.io/molejo-platform/testkit:v0.9.0
           ports:
             - name: http
               containerPort: 8080

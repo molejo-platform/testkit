@@ -7,23 +7,28 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Candidate `0.9.0-rc.1` is prepared on its release branch for validation. It has
-not been tagged or published, and the repository version remains at the latest
-stable release until promotion.
+No changes yet.
+
+## [0.9.0] - 2026-09-23
 
 ### Added
 
-- Added an opt-in PostgreSQL diagnostic laboratory with fixed read-only
-  operations for connectivity, arithmetic, database listing, and schema
-  listing.
+- Added an opt-in PostgreSQL diagnostic laboratory, enabled with
+  `TESTKIT_SMOKES=transport,postgres`, with fixed read-only operations for
+  connectivity, arithmetic, database listing, and schema listing. Transport
+  smoke tests remain the default capability.
 - Added backend-controlled capability discovery, token-file authentication,
   and a read-only destination policy for diagnostic targets.
 - Added separated PostgreSQL target, database, identity, credential, TLS, and
   lifecycle contracts, including process-local retained connections.
 - Added local `test-local`, `test-browser`, `test-postgres`, and `test-full`
-  gates; the PostgreSQL gate provisions and removes a disposable real server.
+  gates; the PostgreSQL gate provisions and removes a disposable real server
+  and covers successful operations, server-selected databases, retained
+  connections, authentication failures, missing databases, and TLS failures.
 - Added browser-level Playwright coverage and a pull-request workflow covering
   Go, frontend, browser, and vulnerability checks.
+- Added a localized, accessible show/hide control to the PostgreSQL credential
+  input.
 
 ### Changed
 
@@ -35,6 +40,8 @@ stable release until promotion.
 - JSON requests, responses, and transport event payloads now use shared
   syntax highlighting with literal-text fallback; static panels can copy their
   exact displayed content.
+- The home page now presents transport smoke tests before opt-in database
+  diagnostics, with clear separation between the sections.
 - Split runtime configuration, REST, GraphQL, and shared HTTP helpers out of
   the main server module without changing the existing public routes.
 - Expanded localized documentation and browser content for the PostgreSQL
@@ -62,12 +69,14 @@ stable release until promotion.
 - Diagnostic destinations are re-resolved for every attempt, checked against
   the configured allowlist, denied for loopback unless explicitly named, and
   pinned to the validated IP while preserving TLS hostname verification.
-- Arbitrary SQL, inherited PostgreSQL credential files, redirects, cross-origin
-  browser requests, oversized inputs, secret echoing, and unbounded diagnostic
-  concurrency are rejected.
+- Arbitrary SQL, unsupported connection URI parameters, inherited PostgreSQL
+  credential files, cross-origin browser requests, oversized inputs, secret
+  echoing, and unbounded diagnostic concurrency are rejected.
 - Added non-cacheable diagnostic responses, browser security headers, request
-  rate limits, execution deadlines, result limits, and local source/binary
-  vulnerability gates.
+  rate limits, execution deadlines, and result limits.
+- Pull-request validation now checks Go source dependencies for known
+  vulnerabilities; release validation repeats that check and scans the compiled
+  binary before publication.
 
 ## [0.8.0] - 2026-09-10
 
@@ -236,7 +245,8 @@ stable release until promotion.
 
 - Initial multi-platform image publication workflow for GitHub Container Registry.
 
-[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/molejo-platform/testkit/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/molejo-platform/testkit/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/molejo-platform/testkit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/molejo-platform/testkit/compare/v0.6.1...v0.7.0

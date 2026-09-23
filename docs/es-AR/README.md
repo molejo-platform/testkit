@@ -26,11 +26,11 @@ ghcr.io/molejo-platform/testkit
 Definí la imagen una vez antes de seguir los ejemplos:
 
 ```sh
-export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.8.0
+export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.9.0
 docker pull "$TESTKIT_IMAGE"
 ```
 
-`v0.8.0` es la imagen estable más reciente publicada al escribir esta guía. Una
+`v0.9.0` es la imagen estable más reciente publicada al escribir esta guía. Una
 branch de release puede documentar capacidades todavía no presentes en una
 imagen correspondiente. En ambientes automatizados, reemplazá el tag por el
 digest inmutable publicado por la release:
@@ -75,7 +75,7 @@ curl --fail http://localhost:8080/api/status
 La respuesta de estado incluye la versión exacta incorporada en la imagen:
 
 ```json
-{"status":"ok","version":"v0.8.0"}
+{"status":"ok","version":"v0.9.0"}
 ```
 
 ### 3. Abrí la consola en el navegador
@@ -327,9 +327,8 @@ Los diagnósticos PostgreSQL son opt-in y requieren dos archivos: un token
 operativo de la API y una allowlist de destinos. El token del deployment está
 separado de la credencial de base usada en el diagnóstico.
 
-Esta capacidad no está presente en la imagen publicada `v0.8.0` usada en el
-inicio rápido. Usá un tag o digest futuro que incluya diagnósticos PostgreSQL, o
-construí la candidata actual según la guía de contribución.
+Esta capacidad está incluida en `v0.9.0` y permanece deshabilitada hasta que el
+token y la política de destinos requeridos se configuren explícitamente.
 
 ### 1. Creá los archivos de configuración locales
 
@@ -460,7 +459,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: testkit
-          image: ghcr.io/molejo-platform/testkit:v0.8.0
+          image: ghcr.io/molejo-platform/testkit:v0.9.0
           ports:
             - name: http
               containerPort: 8080
