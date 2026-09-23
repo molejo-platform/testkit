@@ -71,14 +71,17 @@ jobs:
       - name: Test
         run: go test -race -cover ./...
 
-      - name: Frontend tests
-        run: npm ci && npm run test:frontend
-
       - name: Check Go vulnerabilities
         uses: golang/govulncheck-action@v1.1.0
         with:
           go-version-input: "1.26.7"
           go-package: ./...
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend tests
+        run: npm run test:frontend
 
       - name: Install browser
         run: npx playwright install --with-deps chromium
