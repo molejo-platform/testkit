@@ -26,11 +26,11 @@ ghcr.io/molejo-platform/testkit
 Defina a imagem uma vez antes de seguir os exemplos:
 
 ```sh
-export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.9.0
+export TESTKIT_IMAGE=ghcr.io/molejo-platform/testkit:v0.10.0
 docker pull "$TESTKIT_IMAGE"
 ```
 
-`v0.9.0` é a imagem estável mais recente publicada no momento da escrita deste
+`v0.10.0` é a imagem estável mais recente publicada no momento da escrita deste
 guia. Uma branch de release pode documentar capacidades ainda não presentes em
 uma imagem correspondente. Em ambientes automatizados, substitua a tag pelo
 digest imutável publicado pela release:
@@ -75,7 +75,7 @@ curl --fail http://localhost:8080/api/status
 A resposta de status inclui a versão exata incorporada na imagem:
 
 ```json
-{"status":"ok","version":"v0.9.0"}
+{"status":"ok","version":"v0.10.0"}
 ```
 
 ### 3. Abra o console no navegador
@@ -463,7 +463,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: testkit
-          image: ghcr.io/molejo-platform/testkit:v0.9.0
+          image: ghcr.io/molejo-platform/testkit:v0.10.0
           ports:
             - name: http
               containerPort: 8080

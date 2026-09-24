@@ -9,6 +9,34 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 No changes yet.
 
+## [0.10.0] - 2026-09-23
+
+### Added
+
+- PostgreSQL diagnostics now display browser-observed duration, server diagnostic
+  duration, Testkit version, and correlation ID for ephemeral and retained checks.
+
+### Changed
+
+- The PostgreSQL browser laboratory now provides focused inline validation,
+  human-readable result summaries, recovery guidance, capability-discovery
+  warnings, progressive disclosure for advanced settings, and clearer action
+  states on narrow and desktop viewports.
+
+### Fixed
+
+- Cancelling a PostgreSQL diagnostic and immediately retrying no longer allows
+  the stale request to overwrite the newer result or unlock its controls.
+- Retained-connection operations preserve the effective target summary and keep
+  authentication controls stable while a request is active.
+- Clearing a retained connection after cleanup failure removes local secrets
+  while preserving the non-secret state needed to retry destruction.
+
+### Security
+
+- Retained browser state now excludes the deployment token, credential secrets,
+  certificate contents, URI credentials, and nonessential URI parameters.
+
 ## [0.9.0] - 2026-09-23
 
 ### Added
@@ -245,7 +273,8 @@ No changes yet.
 
 - Initial multi-platform image publication workflow for GitHub Container Registry.
 
-[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/molejo-platform/testkit/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/molejo-platform/testkit/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/molejo-platform/testkit/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/molejo-platform/testkit/compare/v0.7.0...v0.7.1
