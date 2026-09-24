@@ -74,7 +74,13 @@ globalThis.document = {
 const { mountRestLab, restPresets } = await import("../static/rest-ui.js");
 const { mountGraphQLLab, graphQLPresets } = await import("../static/graphql-ui.js");
 const { mountSSELab } = await import("../static/sse-ui.js");
-const { mountPostgresLab, postgresConnectionPayload } = await import("../static/postgres-ui.js");
+const {
+  mountPostgresLab,
+  postgresConnectionPayload,
+  postgresFormValidation,
+  postgresResultPresentation,
+  postgresViewState,
+} = await import("../static/postgres-ui.js");
 
 const browserCorrelationID = "018f47de-1234-7abc-8def-0123456789ab";
 
@@ -117,6 +123,88 @@ test("PostgreSQL URI remains an explicit alternative and keeps lifecycle separat
   });
 });
 
+test("PostgreSQL view state derives visibility and requirements without touching the DOM", () => {
+  assert.deepEqual(postgresViewState({
+    mode: "fields", host: "db.example", port: "5432", user: "operator",
+    credential_type: "password", tls: "verify-full", lifecycle: "ephemeral",
+  }, { databaseRequired: true }), {
+    useURI: false,
+    showCredentialSecret: true,
+    showCA: true,
+    showCreate: false,
+    required: {
+      token: true,
+      host: true,
+      port: true,
+      user: true,
+      credential_secret: true,
+      database: true,
+      uri: false,
+    },
+  });
+
+  assert.deepEqual(postgresViewState({
+    mode: "uri", uri: "postgresql://operator@db.example/app?sslmode=disable",
+    lifecycle: "retained",
+  }), {
+    useURI: true,
+    showCredentialSecret: false,
+    showCA: false,
+    showCreate: true,
+    required: {
+      token: true,
+      host: false,
+      port: false,
+      user: false,
+      credential_secret: false,
+      database: false,
+      uri: true,
+    },
+  });
+});
+
+test("PostgreSQL form validation reports the first actionable field", () => {
+  const base = {
+    token: "deployment-token", mode: "fields", host: "db.example", port: "5432",
+    user: "operator", credential_type: "password", credential_secret: "secret",
+    database: "", tls: "verify-full", lifecycle: "ephemeral", uri: "", ca_pem: "",
+  };
+
+  assert.deepEqual(postgresFormValidation({ ...base, token: "" }), { field: "token", messageKey: "postgres.validation_token" });
+  assert.deepEqual(postgresFormValidation({ ...base, host: "" }), { field: "host", messageKey: "postgres.validation_host" });
+  assert.deepEqual(postgresFormValidation({ ...base, port: "70000" }), { field: "port", messageKey: "postgres.validation_port" });
+  assert.deepEqual(postgresFormValidation({ ...base, credential_secret: "" }), { field: "credential_secret", messageKey: "postgres.validation_credential_secret" });
+  assert.deepEqual(postgresFormValidation({ ...base, credential_type: "none", credential_secret: "" }), null);
+  assert.deepEqual(postgresFormValidation({ ...base, database: "" }, { databaseRequired: true }), { field: "database", messageKey: "postgres.validation_database" });
+  assert.deepEqual(postgresFormValidation({ ...base, mode: "uri", uri: "not-a-postgres-uri" }), { field: "uri", messageKey: "postgres.validation_uri" });
+  assert.deepEqual(postgresFormValidation({ ...base, mode: "uri", uri: "postgresql://operator@db.example/app" }), null);
+});
+
+test("PostgreSQL result presentation keeps technical codes while offering recovery copy", () => {
+  assert.deepEqual(postgresResultPresentation({ ok: false, status: 401 }, { code: "unauthorized" }), {
+    passed: false,
+    code: "unauthorized",
+    titleKey: "postgres.result_unauthorized",
+    detailKey: "postgres.result_unauthorized_detail",
+  });
+  assert.deepEqual(postgresResultPresentation({ ok: false, status: 200 }, {
+    status: "error", code: "authentication_failed",
+  }), {
+    passed: false,
+    code: "authentication_failed",
+    titleKey: "postgres.result_authentication_failed",
+    detailKey: "postgres.result_authentication_failed_detail",
+  });
+  assert.deepEqual(postgresResultPresentation({ ok: true, status: 200 }, {
+    status: "success", code: "ok",
+  }), {
+    passed: true,
+    code: "ok",
+    titleKey: "postgres.result_success",
+    detailKey: "postgres.result_success_detail",
+  });
+});
+
 function createPostgresRoot(lifecycle = "ephemeral") {
   const form = new FakeElement();
   form.formValues = {
@@ -131,6 +219,7 @@ function createPostgresRoot(lifecycle = "ephemeral") {
   };
 
   const credentialToggle = new FakeElement();
+  credentialToggle.dataset.postgresToggleSecret = "credential_secret";
   credentialToggle.dataset.labelShow = "show";
   credentialToggle.dataset.labelHide = "hide";
   credentialToggle.controls = new Map([
@@ -144,7 +233,6 @@ function createPostgresRoot(lifecycle = "ephemeral") {
     "[data-postgres-fields]": new FakeElement(),
     "[data-postgres-uri]": new FakeElement(),
     "[data-postgres-credential-secret]": new FakeElement(),
-    "[data-postgres-toggle-secret]": credentialToggle,
     "[data-postgres-ca]": new FakeElement(),
     "[data-postgres-cancel]": new FakeElement(),
     "[data-postgres-clear]": new FakeElement(),
@@ -153,6 +241,10 @@ function createPostgresRoot(lifecycle = "ephemeral") {
     "[data-postgres-output]": new FakeElement(),
     "[data-postgres-summary]": new FakeElement(),
     "[data-postgres-status]": new FakeElement(),
+    "[data-postgres-result-summary]": new FakeElement(),
+    "[data-postgres-result-title]": new FakeElement(),
+    "[data-postgres-result-detail]": new FakeElement(),
+    "[data-postgres-result-code]": new FakeElement(),
     "[data-postgres-response]": new FakeElement(),
     "[data-postgres-total-duration]": new FakeElement(),
     "[data-postgres-diagnostic-duration]": new FakeElement(),
@@ -163,6 +255,9 @@ function createPostgresRoot(lifecycle = "ephemeral") {
     "[data-postgres-operation]": [operation],
     "[data-postgres-connection-control]": [],
     "[data-postgres-capability]": [],
+    "[data-postgres-toggle-secret]": [credentialToggle],
+    "[data-postgres-error]": [],
+    "[data-postgres-required-indicator]": [],
     "input[name=\"mode\"]": [],
     "[data-json-copy]": [],
   });

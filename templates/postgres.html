@@ -16,42 +16,71 @@
       <div class="lab-contract"><span>{{ .T "lab.contract" }}</span><code>{{ .LabEndpoint }}</code></div>
     </div>
 
-    <form class="diagnostic-form" data-postgres-form>
-      <fieldset><legend>{{ .T "postgres.access" }}</legend><label>{{ .T "postgres.token" }}<input type="password" name="token" autocomplete="off" required></label></fieldset>
+    <form class="diagnostic-form" data-postgres-form novalidate>
+      <fieldset>
+        <legend>{{ .T "postgres.access" }}</legend>
+        <div class="form-field">
+          <label for="postgres-access-token">{{ .T "postgres.token" }} <span class="required-indicator" aria-hidden="true">*</span></label>
+          <div class="input-group">
+            <input id="postgres-access-token" type="password" name="token" autocomplete="off" required aria-describedby="postgres-token-hint postgres-token-error">
+            <button class="input-group__button" type="button" aria-label="{{ .T "postgres.show_token" }}" aria-pressed="false" data-label-show="{{ .T "postgres.show_token" }}" data-label-hide="{{ .T "postgres.hide_token" }}" data-postgres-toggle-secret="token">
+              <svg data-password-icon-show aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <svg data-password-icon-hide aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 4.2A11.8 11.8 0 0 1 12 4c6.5 0 10 8 10 8a17.7 17.7 0 0 1-2.1 3.2"></path><path d="M6.6 6.6C3.5 8.6 2 12 2 12s3.5 8 10 8a10.7 10.7 0 0 0 5.4-1.5"></path></svg>
+            </button>
+          </div>
+          <p class="field-hint" id="postgres-token-hint">{{ .T "postgres.token_help" }}</p>
+          <p class="field-error" id="postgres-token-error" role="alert" data-postgres-error="token" hidden></p>
+        </div>
+      </fieldset>
       <fieldset>
         <legend>{{ .T "postgres.connection" }}</legend>
         <div class="form-choice"><label><input type="radio" name="mode" value="fields" data-postgres-connection-control checked> {{ .T "postgres.mode_fields" }}</label><label><input type="radio" name="mode" value="uri" data-postgres-connection-control> URI</label></div>
+        <p class="capability-warning" role="status" data-postgres-capabilities-warning hidden>{{ .T "postgres.capabilities_warning" }}</p>
         <div class="form-grid" data-postgres-fields>
-          <label>{{ .T "postgres.host" }}<input name="host" autocomplete="off" data-postgres-connection-control></label>
-          <label>{{ .T "postgres.port" }}<input name="port" type="number" min="1" max="65535" value="5432" data-postgres-connection-control></label>
-          <label>{{ .T "postgres.user" }}<input name="user" autocomplete="username" data-postgres-connection-control></label>
-          <label>{{ .T "postgres.credential_type" }}<select name="credential_type" data-postgres-capability="credential_types" data-postgres-connection-control><option value="password">{{ .T "postgres.password" }}</option><option value="token">Token</option><option value="none">{{ .T "postgres.credential_none" }}</option></select></label>
+          <label>{{ .T "postgres.host" }} <span class="required-indicator" aria-hidden="true">*</span><input name="host" autocomplete="off" required aria-describedby="postgres-host-error" data-postgres-connection-control><span class="field-error" id="postgres-host-error" role="alert" data-postgres-error="host" hidden></span></label>
+          <label>{{ .T "postgres.port" }} <span class="required-indicator" aria-hidden="true">*</span><input name="port" type="number" min="1" max="65535" value="5432" inputmode="numeric" required aria-describedby="postgres-port-error" data-postgres-connection-control><span class="field-error" id="postgres-port-error" role="alert" data-postgres-error="port" hidden></span></label>
+          <label>{{ .T "postgres.user" }} <span class="required-indicator" aria-hidden="true">*</span><input name="user" autocomplete="username" required aria-describedby="postgres-user-error" data-postgres-connection-control><span class="field-error" id="postgres-user-error" role="alert" data-postgres-error="user" hidden></span></label>
+          <label>{{ .T "postgres.credential_type" }}<select name="credential_type" data-postgres-capability="credential_types" data-postgres-connection-control><option value="password">{{ .T "postgres.password" }}</option><option value="token">{{ .T "postgres.credential_token" }}</option><option value="none">{{ .T "postgres.credential_none" }}</option></select></label>
           <div class="form-field" data-postgres-credential-secret>
-            <label for="postgres-credential-secret">{{ .T "postgres.credential_secret" }}</label>
+            <label for="postgres-credential-secret">{{ .T "postgres.credential_secret" }} <span class="required-indicator" aria-hidden="true">*</span></label>
             <div class="input-group">
-              <input id="postgres-credential-secret" name="credential_secret" type="password" autocomplete="current-password" data-postgres-connection-control>
-              <button class="input-group__button" type="button" aria-label="{{ .T "postgres.show_credential_secret" }}" aria-pressed="false" data-label-show="{{ .T "postgres.show_credential_secret" }}" data-label-hide="{{ .T "postgres.hide_credential_secret" }}" data-postgres-toggle-secret data-postgres-connection-control>
+              <input id="postgres-credential-secret" name="credential_secret" type="password" autocomplete="current-password" required aria-describedby="postgres-credential-hint postgres-credential-error" data-postgres-connection-control>
+              <button class="input-group__button" type="button" aria-label="{{ .T "postgres.show_credential_secret" }}" aria-pressed="false" data-label-show="{{ .T "postgres.show_credential_secret" }}" data-label-hide="{{ .T "postgres.hide_credential_secret" }}" data-postgres-toggle-secret="credential_secret" data-postgres-connection-control>
                 <svg data-password-icon-show aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 <svg data-password-icon-hide aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden><path d="m3 3 18 18"></path><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"></path><path d="M9.9 4.2A11.8 11.8 0 0 1 12 4c6.5 0 10 8 10 8a17.7 17.7 0 0 1-2.1 3.2"></path><path d="M6.6 6.6C3.5 8.6 2 12 2 12s3.5 8 10 8a10.7 10.7 0 0 0 5.4-1.5"></path></svg>
               </button>
             </div>
+            <p class="field-hint" id="postgres-credential-hint">{{ .T "postgres.credential_secret_help" }}</p>
+            <p class="field-error" id="postgres-credential-error" role="alert" data-postgres-error="credential_secret" hidden></p>
           </div>
-          <label>{{ .T "postgres.database" }}<input name="database" autocomplete="off" placeholder="{{ .T "postgres.database_optional" }}" data-postgres-connection-control></label>
+          <label>{{ .T "postgres.database" }} <span class="required-indicator" aria-hidden="true" data-postgres-required-indicator="database" hidden>*</span><input name="database" autocomplete="off" placeholder="{{ .T "postgres.database_optional" }}" aria-describedby="postgres-database-error" data-postgres-connection-control><span class="field-error" id="postgres-database-error" role="alert" data-postgres-error="database" hidden></span></label>
           <label>TLS<select name="tls" data-postgres-capability="tls_modes" data-postgres-connection-control><option value="verify-full">verify-full</option><option value="disable">{{ .T "postgres.tls_disable" }}</option></select></label>
-          <label>{{ .T "postgres.lifecycle" }}<select name="lifecycle" data-postgres-capability="lifecycle_modes" data-postgres-connection-control><option value="ephemeral">{{ .T "postgres.lifecycle_ephemeral" }}</option><option value="retained">{{ .T "postgres.lifecycle_retained" }}</option></select></label>
         </div>
-        <label data-postgres-uri hidden>URI<input name="uri" type="password" autocomplete="off" placeholder="postgresql://user:password@host:5432/database" data-postgres-connection-control></label>
-        <label data-postgres-ca>{{ .T "postgres.ca" }}<textarea name="ca_pem" rows="4" spellcheck="false" data-postgres-connection-control></textarea></label>
+        <div class="form-field" data-postgres-uri hidden>
+          <label for="postgres-uri">URI <span class="required-indicator" aria-hidden="true">*</span></label>
+          <input id="postgres-uri" name="uri" type="password" autocomplete="off" placeholder="postgresql://user:password@host:5432/database" aria-describedby="postgres-uri-hint postgres-uri-error" data-postgres-connection-control>
+          <p class="field-hint" id="postgres-uri-hint">{{ .T "postgres.uri_help" }}</p>
+          <p class="field-error" id="postgres-uri-error" role="alert" data-postgres-error="uri" hidden></p>
+        </div>
+        <details class="diagnostic-advanced">
+          <summary>{{ .T "postgres.advanced" }}</summary>
+          <div class="diagnostic-advanced__content">
+            <label>{{ .T "postgres.lifecycle" }}<select name="lifecycle" data-postgres-capability="lifecycle_modes" data-postgres-connection-control><option value="ephemeral">{{ .T "postgres.lifecycle_ephemeral" }}</option><option value="retained">{{ .T "postgres.lifecycle_retained" }}</option></select></label>
+            <label data-postgres-ca>{{ .T "postgres.ca" }}<textarea name="ca_pem" rows="4" spellcheck="false" data-postgres-connection-control></textarea></label>
+          </div>
+        </details>
       </fieldset>
       <fieldset>
         <legend>{{ .T "postgres.operations" }}</legend>
         <div class="diagnostic-actions">
           <button class="button button--primary" type="button" data-postgres-create hidden>{{ .T "postgres.create_connection" }}</button>
-          <button class="button button--secondary" type="button" data-postgres-destroy hidden>{{ .T "postgres.destroy_connection" }}</button>
           <button class="button button--primary" type="button" data-postgres-operation="connect">{{ .T "postgres.connect" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="arithmetic_check">SELECT 1 + 1</button>
           <button class="button button--secondary" type="button" data-postgres-operation="list_databases">{{ .T "postgres.list_databases" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="list_schemas">{{ .T "postgres.list_schemas" }}</button>
+        </div>
+        <div class="diagnostic-actions diagnostic-actions--utility">
+          <button class="button button--danger" type="button" data-postgres-destroy hidden>{{ .T "postgres.destroy_connection" }}</button>
           <button class="button button--secondary" type="button" data-postgres-cancel hidden>{{ .T "lab.cancel" }}</button>
           <button class="button button--secondary" type="button" data-postgres-clear>{{ .T "postgres.clear" }}</button>
         </div>
@@ -59,13 +88,21 @@
     </form>
     <article class="lab-output diagnostic-output" data-postgres-output aria-busy="false">
       <header class="lab-output__header"><div><p class="preset-panel__label">{{ .T "postgres.effective_target" }}</p><code data-postgres-summary>—</code></div><span class="lab-result-status" role="status" aria-live="polite" data-postgres-status>{{ .T "lab.waiting" }}</span></header>
-      <section class="code-panel">
-        <div class="code-panel__header">
-          <h3>{{ .T "lab.response" }}</h3>
-          <button class="code-copy-button" type="button" aria-live="polite" data-json-copy="#postgres-response-json">{{ .T "json.copy" }}</button>
-        </div>
-        <pre id="postgres-response-json" data-postgres-response>{{ .T "lab.run_to_see" }}</pre>
+      <section class="diagnostic-result-summary" data-postgres-result-summary hidden>
+        <h3 data-postgres-result-title></h3>
+        <p data-postgres-result-detail></p>
+        <p class="diagnostic-result-summary__code">{{ .T "postgres.result_code" }} <code data-postgres-result-code></code></p>
       </section>
+      <details class="diagnostic-details">
+        <summary>{{ .T "postgres.details_json" }}</summary>
+        <section class="code-panel">
+          <div class="code-panel__header">
+            <h3>{{ .T "lab.response" }}</h3>
+            <button class="code-copy-button" type="button" aria-live="polite" data-json-copy="#postgres-response-json">{{ .T "json.copy" }}</button>
+          </div>
+          <pre id="postgres-response-json" data-postgres-response>{{ .T "lab.run_to_see" }}</pre>
+        </section>
+      </details>
       <footer class="lab-output__footer">
         <span>{{ .T "postgres.total_duration" }} <strong data-postgres-total-duration>—</strong></span>
         <span>{{ .T "postgres.diagnostic_duration" }} <strong data-postgres-diagnostic-duration>—</strong></span>
