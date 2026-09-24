@@ -28,21 +28,14 @@ func TestPostgresIntegration(t *testing.T) {
 	target := validatedTarget{host: resolved.Target.Host, port: resolved.Target.Port, ips: []netip.Addr{address}}
 	executor := &postgresExecutor{}
 
-	for _, operation := range []string{"connect", "arithmetic_check", "controlled_delay", "list_databases", "list_schemas"} {
+	for _, operation := range []string{"connect", "arithmetic_check", "list_databases", "list_schemas"} {
 		t.Run(operation, func(t *testing.T) {
 			request := base
 			request.Operation = operation
 			request.resolved = resolved
-			started := time.Now()
 			result := executor.Execute(context.Background(), request, target)
 			if result.Status != "success" {
 				t.Fatalf("result = %+v", result)
-			}
-			if operation == "controlled_delay" {
-				data, _ := result.Data.(map[string]any)
-				if elapsed := time.Since(started); elapsed < postgresControlledDelay || data["requested_delay_ms"] != postgresControlledDelay.Milliseconds() {
-					t.Fatalf("elapsed = %s, result = %+v", elapsed, result)
-				}
 			}
 		})
 	}
@@ -77,6 +70,12 @@ func TestPostgresIntegration(t *testing.T) {
 		reusedData, _ := reused.Data.(map[string]any)
 		if !ok || createdData["backend_pid"] != reusedData["backend_pid"] {
 			t.Fatalf("created = %+v, reused = %+v", created, reused)
+		}
+		started := time.Now()
+		delayed, ok := registry.Execute(t.Context(), view.ID, "controlled_delay")
+		delayedData, _ := delayed.Data.(map[string]any)
+		if elapsed := time.Since(started); !ok || delayed.Status != "success" || elapsed < postgresControlledDelay || delayedData["requested_delay_ms"] != postgresControlledDelay.Milliseconds() {
+			t.Fatalf("elapsed = %s, delayed = %+v, ok = %v", elapsed, delayed, ok)
 		}
 		if !registry.Delete(t.Context(), view.ID) {
 			t.Fatal("retained connection was not deleted")
