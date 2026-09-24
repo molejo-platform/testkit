@@ -7,11 +7,21 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+No changes yet.
+
+## [0.11.0] - 2026-09-24
+
 ### Added
 
 - Added a fixed 500 ms PostgreSQL controlled-delay diagnostic for separating
   database round-trip timing from the surrounding browser and API path without
   accepting arbitrary SQL or generating synthetic CPU work.
+
+### Changed
+
+- Pull-request CI now runs the tagged PostgreSQL integration suite, and the
+  controlled-delay test measures only the operation on an established retained
+  connection.
 
 ## [0.10.0] - 2026-09-23
 
@@ -277,7 +287,8 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Initial multi-platform image publication workflow for GitHub Container Registry.
 
-[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/molejo-platform/testkit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/molejo-platform/testkit/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/molejo-platform/testkit/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/molejo-platform/testkit/compare/v0.7.1...v0.8.0
