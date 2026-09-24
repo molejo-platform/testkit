@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	postgresDefaultPort   = 5432
-	postgresMaxItems      = 100
-	postgresMaxCAPEMBytes = 64 * 1024
+	postgresDefaultPort     = 5432
+	postgresMaxItems        = 100
+	postgresMaxCAPEMBytes   = 64 * 1024
+	postgresControlledDelay = 500 * time.Millisecond
 )
 
 type postgresDiagnosticRequest struct {
@@ -116,7 +117,7 @@ type postgresLifecycle struct{ Mode string }
 
 func (request postgresDiagnosticRequest) resolve() (postgresConnection, error) {
 	switch request.Operation {
-	case "connect", "arithmetic_check", "list_databases", "list_schemas":
+	case "connect", "arithmetic_check", "controlled_delay", "list_databases", "list_schemas":
 	default:
 		return postgresConnection{}, errors.New("unsupported_operation")
 	}
@@ -356,6 +357,8 @@ func (handle *pgxPostgresConnection) Execute(ctx context.Context, operation stri
 		return successfulPostgresResult(map[string]any{"connected": true, "tls": resolved.TLS.Mode, "database": database, "user": user, "backend_pid": backendPID})
 	case "arithmetic_check":
 		return executeArithmeticCheck(ctx, handle.connection)
+	case "controlled_delay":
+		return executeControlledDelay(ctx, handle.connection)
 	case "list_databases":
 		return executeListDatabases(ctx, handle.connection)
 	case "list_schemas":
@@ -415,6 +418,13 @@ func postgresConfig(connection postgresConnection, target validatedTarget) (*pgx
 	}
 	config.TLSConfig = tlsConfig
 	return config, nil
+}
+
+func executeControlledDelay(ctx context.Context, connection *pgx.Conn) diagnosticResult {
+	if _, err := connection.Exec(ctx, "SELECT pg_sleep($1)", postgresControlledDelay.Seconds()); err != nil {
+		return classifyPostgresError(ctx, err)
+	}
+	return successfulPostgresResult(map[string]any{"requested_delay_ms": postgresControlledDelay.Milliseconds()})
 }
 
 func executeArithmeticCheck(ctx context.Context, connection *pgx.Conn) diagnosticResult {

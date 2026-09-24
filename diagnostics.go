@@ -340,7 +340,7 @@ func (service *diagnosticService) capabilitiesHandler(writer http.ResponseWriter
 	writeJSON(writer, http.StatusOK, postgresCapabilities{
 		SchemaVersion: 1, ConnectionModes: []string{"structured", "uri"},
 		CredentialTypes: []string{"password", "token", "none"}, TLSModes: []string{"verify-full", "disable"},
-		LifecycleModes: []string{"ephemeral", "retained"}, Operations: []string{"connect", "arithmetic_check", "list_databases", "list_schemas"},
+		LifecycleModes: []string{"ephemeral", "retained"}, Operations: []string{"connect", "arithmetic_check", "controlled_delay", "list_databases", "list_schemas"},
 		DatabaseRequired: false, DefaultPort: postgresDefaultPort, DefaultTLSMode: "verify-full", DefaultLifecycle: "ephemeral",
 		MaxRetained: postgresMaxRetainedConnections,
 	})
@@ -516,7 +516,7 @@ func (service *diagnosticService) completeResult(request *http.Request, result *
 
 func supportedPostgresOperation(operation string) bool {
 	switch operation {
-	case "connect", "arithmetic_check", "list_databases", "list_schemas":
+	case "connect", "arithmetic_check", "controlled_delay", "list_databases", "list_schemas":
 		return true
 	default:
 		return false

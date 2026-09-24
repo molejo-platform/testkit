@@ -76,9 +76,11 @@
           <button class="button button--primary" type="button" data-postgres-create hidden>{{ .T "postgres.create_connection" }}</button>
           <button class="button button--primary" type="button" data-postgres-operation="connect">{{ .T "postgres.connect" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="arithmetic_check">SELECT 1 + 1</button>
+          <button class="button button--secondary" type="button" data-postgres-operation="controlled_delay">{{ .T "postgres.controlled_delay" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="list_databases">{{ .T "postgres.list_databases" }}</button>
           <button class="button button--secondary" type="button" data-postgres-operation="list_schemas">{{ .T "postgres.list_schemas" }}</button>
         </div>
+        <p class="field-hint">{{ .T "postgres.controlled_delay_help" }}</p>
         <div class="diagnostic-actions diagnostic-actions--utility">
           <button class="button button--danger" type="button" data-postgres-destroy hidden>{{ .T "postgres.destroy_connection" }}</button>
           <button class="button button--secondary" type="button" data-postgres-cancel hidden>{{ .T "lab.cancel" }}</button>

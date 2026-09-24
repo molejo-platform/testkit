@@ -7,7 +7,11 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-No changes yet.
+### Added
+
+- Added a fixed 500 ms PostgreSQL controlled-delay diagnostic for separating
+  database round-trip timing from the surrounding browser and API path without
+  accepting arbitrary SQL or generating synthetic CPU work.
 
 ## [0.10.0] - 2026-09-23
 

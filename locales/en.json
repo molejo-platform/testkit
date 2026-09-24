@@ -197,6 +197,8 @@
 	"postgres.destroy_connection": "Destroy retained connection",
 	"postgres.destroyed": "Connection destroyed",
 	"postgres.destroyed_detail": "The retained connection was removed from testkit memory and closed.",
+	"postgres.controlled_delay": "Controlled delay (500 ms)",
+	"postgres.controlled_delay_help": "The controlled delay occupies one PostgreSQL connection for 500 ms without synthetic CPU or I/O work. Use a retained connection to isolate the database round trip.",
 	"postgres.list_databases": "List databases",
 	"postgres.list_schemas": "List schemas",
 	"postgres.clear": "Clear local credentials and result",

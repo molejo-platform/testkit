@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestPostgresIntegration(t *testing.T) {
@@ -27,14 +28,21 @@ func TestPostgresIntegration(t *testing.T) {
 	target := validatedTarget{host: resolved.Target.Host, port: resolved.Target.Port, ips: []netip.Addr{address}}
 	executor := &postgresExecutor{}
 
-	for _, operation := range []string{"connect", "arithmetic_check", "list_databases", "list_schemas"} {
+	for _, operation := range []string{"connect", "arithmetic_check", "controlled_delay", "list_databases", "list_schemas"} {
 		t.Run(operation, func(t *testing.T) {
 			request := base
 			request.Operation = operation
 			request.resolved = resolved
+			started := time.Now()
 			result := executor.Execute(context.Background(), request, target)
 			if result.Status != "success" {
 				t.Fatalf("result = %+v", result)
+			}
+			if operation == "controlled_delay" {
+				data, _ := result.Data.(map[string]any)
+				if elapsed := time.Since(started); elapsed < postgresControlledDelay || data["requested_delay_ms"] != postgresControlledDelay.Milliseconds() {
+					t.Fatalf("elapsed = %s, result = %+v", elapsed, result)
+				}
 			}
 		})
 	}

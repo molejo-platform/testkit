@@ -15,6 +15,7 @@ func TestPostgresConnectionResolution(t *testing.T) {
 		code  string
 	}{
 		{name: "structured", input: postgresDiagnosticRequest{Operation: "connect", Connection: structuredPostgresInput("none", "")}},
+		{name: "controlled delay", input: postgresDiagnosticRequest{Operation: "controlled_delay", Connection: structuredPostgresInput("none", "")}},
 		{name: "legacy fields", input: postgresDiagnosticRequest{Operation: "connect", Connection: postgresConnectionInput{Host: "db.example", User: "operator"}}},
 		{name: "uri", input: postgresDiagnosticRequest{Operation: "connect", Connection: postgresConnectionInput{URI: "postgresql://operator:secret@db.example/app?sslmode=verify-full"}}},
 		{name: "conflicting modes", input: postgresDiagnosticRequest{Operation: "connect", Connection: postgresConnectionInput{URI: "postgresql://operator@db.example/app", Host: "other"}}, code: "connection_modes_conflict"},
@@ -138,7 +139,7 @@ func TestPostgresConfigPinsValidatedAddressAndClearsFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(config.Fallbacks) != 0 || config.TLSConfig == nil || config.TLSConfig.ServerName != "db.example" {
+	if len(config.Fallbacks) != 0 || config.TLSConfig == nil || config.TLSConfig.ServerName != "db.example" || config.RuntimeParams["statement_timeout"] != "8000" {
 		t.Fatalf("config not constrained")
 	}
 	addresses, err := config.LookupFunc(t.Context(), "db.example")

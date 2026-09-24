@@ -406,8 +406,13 @@ curl --fail --json '{
   http://localhost:8080/api/diagnostics/postgres
 ```
 
-Las operaciones disponibles son `connect`, `arithmetic_check`, `list_databases`
-y `list_schemas`. No se acepta SQL arbitrario.
+Las operaciones disponibles son `connect`, `arithmetic_check`,
+`controlled_delay`, `list_databases` y `list_schemas`. No se acepta SQL
+arbitrario. La operación `controlled_delay` ejecuta un `pg_sleep` controlado por
+el servidor durante 500 ms fijos; valida la instrumentación de tiempos sin
+trabajo sintético de CPU o E/S y ocupa una conexión durante la espera. Ejecutala
+en una conexión retenida para observar el recorrido hasta la base sin abrir una
+nueva conexión física.
 
 El navegador informa la duración total y la duración del diagnóstico. La
 duración total se mide en el navegador e incluye el intercambio HTTP y la

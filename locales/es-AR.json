@@ -197,6 +197,8 @@
 	"postgres.destroy_connection": "Destruir conexión retenida",
 	"postgres.destroyed": "Conexión destruida",
 	"postgres.destroyed_detail": "La conexión retenida fue eliminada de la memoria del testkit y cerrada.",
+	"postgres.controlled_delay": "Demora controlada (500 ms)",
+	"postgres.controlled_delay_help": "La demora controlada ocupa una conexión PostgreSQL durante 500 ms sin trabajo sintético de CPU o E/S. Usá una conexión retenida para aislar el recorrido hasta la base.",
 	"postgres.list_databases": "Listar bases",
 	"postgres.list_schemas": "Listar schemas",
 	"postgres.clear": "Limpiar credenciales locales y resultado",

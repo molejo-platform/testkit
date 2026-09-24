@@ -192,6 +192,7 @@ test("PostgreSQL remains usable in a narrow viewport", async ({ page }) => {
 });
 
 test("PostgreSQL reveals fields from capabilities and drives retained lifecycle", async ({ page }) => {
+  let retainedOperation;
   await page.route("**/api/diagnostics/postgres/connections", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     const body = route.request().postDataJSON();
@@ -211,11 +212,14 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
       }),
     });
   });
-  await page.route("**/api/diagnostics/postgres/connections/retained-1/operations", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({ status: "success", code: "ok", duration_ms: 3 }),
-  }));
+  await page.route("**/api/diagnostics/postgres/connections/retained-1/operations", async (route) => {
+    retainedOperation = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "success", code: "ok", duration_ms: 503, data: { requested_delay_ms: 500 } }),
+    });
+  });
   await page.route("**/api/diagnostics/postgres/connections/retained-1", (route) => route.fulfill({ status: 204 }));
 
   await page.goto("/en/postgres");
@@ -236,7 +240,9 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
   await expect(page.locator("[data-postgres-version]")).toHaveText("v0.9.0");
   await expect(page.locator("[data-postgres-correlation-id]")).toHaveText("018f47de-1234-7abc-8def-0123456789ab");
   await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
-  await page.getByRole("button", { name: "Test connection" }).click();
+  await page.getByRole("button", { name: "Controlled delay (500 ms)" }).click();
+  expect(retainedOperation).toEqual({ operation: "controlled_delay" });
+  await expect(page.locator("[data-postgres-response]")).toContainText("requested_delay_ms");
   await expect(page.locator("[data-postgres-summary]")).toContainText("203.0.113.10:5432");
   await page.getByRole("button", { name: "Destroy retained connection" }).click();
   await expect(page.locator("[data-postgres-status]")).toHaveText("Connection destroyed");

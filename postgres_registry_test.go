@@ -90,13 +90,13 @@ func TestPostgresRegistryRetainsSerializesAndDestroysConnection(t *testing.T) {
 	if err != nil || result.Status != "success" || view.State != "ready" || view.DatabaseSource != "server_selected" {
 		t.Fatalf("view = %+v, result = %+v, err = %v", view, result, err)
 	}
-	for _, operation := range []string{"arithmetic_check", "list_schemas"} {
+	for _, operation := range []string{"arithmetic_check", "controlled_delay", "list_schemas"} {
 		result, ok := registry.Execute(t.Context(), view.ID, operation)
 		if !ok || result.Status != "success" {
 			t.Fatalf("operation %s: result = %+v, ok = %v", operation, result, ok)
 		}
 	}
-	if len(opener.handles) != 1 || strings.Join(opener.handles[0].operations, ",") != "connect,arithmetic_check,list_schemas" {
+	if len(opener.handles) != 1 || strings.Join(opener.handles[0].operations, ",") != "connect,arithmetic_check,controlled_delay,list_schemas" {
 		t.Fatalf("handles = %+v", opener.handles)
 	}
 	if !registry.Delete(t.Context(), view.ID) || !opener.handles[0].closed {
@@ -119,7 +119,8 @@ func TestPostgresCapabilitiesDescribeContract(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &capabilities); err != nil {
 		t.Fatal(err)
 	}
-	if capabilities.DatabaseRequired || capabilities.DefaultPort != 5432 || len(capabilities.CredentialTypes) != 3 {
+	operations := strings.Join(capabilities.Operations, ",")
+	if capabilities.DatabaseRequired || capabilities.DefaultPort != 5432 || len(capabilities.CredentialTypes) != 3 || operations != "connect,arithmetic_check,controlled_delay,list_databases,list_schemas" {
 		t.Fatalf("capabilities = %+v", capabilities)
 	}
 }
@@ -142,8 +143,8 @@ func TestPostgresRetainedConnectionHTTPContract(t *testing.T) {
 	}
 	operationPath := "/api/diagnostics/postgres/connections/" + created.Connection.ID + "/operations"
 	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, diagnosticRequestFor(http.MethodPost, operationPath, `{"operation":"arithmetic_check"}`))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "arithmetic_check") {
+	handler.ServeHTTP(response, diagnosticRequestFor(http.MethodPost, operationPath, `{"operation":"controlled_delay"}`))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "controlled_delay") {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
