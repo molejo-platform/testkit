@@ -17,6 +17,32 @@ function uriTLSMode(uri) {
   try { return new URL(uri).searchParams.get("sslmode") || "verify-full"; } catch { return "verify-full"; }
 }
 
+export function postgresRetainedViewValues(current) {
+  if (current.mode === "uri") {
+    let uri = "";
+    try {
+      const parsed = new URL(current.uri);
+      const tlsMode = parsed.searchParams.get("sslmode");
+      parsed.username = "";
+      parsed.password = "";
+      parsed.search = "";
+      parsed.hash = "";
+      if (tlsMode) parsed.searchParams.set("sslmode", tlsMode);
+      uri = parsed.toString();
+    } catch { /* A retained connection was already validated; keep an invalid fallback empty. */ }
+    return { mode: "uri", uri, lifecycle: current.lifecycle || "ephemeral" };
+  }
+  return {
+    mode: "fields",
+    host: current.host,
+    port: current.port,
+    credential_type: current.credential_type,
+    database: current.database,
+    tls: current.tls,
+    lifecycle: current.lifecycle || "ephemeral",
+  };
+}
+
 export function postgresViewState(current, { databaseRequired = false, connectionID = null } = {}) {
   const useURI = current.mode === "uri";
   const tlsMode = useURI ? uriTLSMode(current.uri) : current.tls;
@@ -116,6 +142,7 @@ export function mountPostgresLab(root, {
   timeoutMS = 10_000,
 } = {}) {
   const form = root.querySelector("[data-postgres-form]");
+  const tokenControl = form.elements.namedItem("token");
   const fields = root.querySelector("[data-postgres-fields]");
   const uriField = root.querySelector("[data-postgres-uri]");
   const credentialSecret = root.querySelector("[data-postgres-credential-secret]");
@@ -208,6 +235,7 @@ export function mountPostgresLab(root, {
     }
     output.setAttribute("aria-busy", String(next));
     cancelButton.hidden = !next;
+    tokenControl.disabled = next;
     for (const button of operationButtons) button.disabled = next || (isRetained() && !connectionID);
     for (const control of connectionControls) control.disabled = next || Boolean(connectionID);
     createButton.disabled = next || !isRetained() || Boolean(connectionID);
@@ -335,7 +363,7 @@ export function mountPostgresLab(root, {
     const requestID = ++requestSequence;
     setRunning(true, trigger);
     resetFacts();
-    summary.textContent = safeSummary(current);
+    summary.textContent = safeSummary(connectionID ? visibleValues() : current);
     resultSummary.hidden = true;
     status.className = "lab-result-status lab-result-status--running";
     status.setAttribute("role", "status");
@@ -388,7 +416,7 @@ export function mountPostgresLab(root, {
       onResponse(response, body) {
         if (response.ok && body.connection?.id && body.result?.status === "success") {
           connectionID = body.connection.id;
-          connectionValues = current;
+          connectionValues = postgresRetainedViewValues(current);
         }
       },
     });

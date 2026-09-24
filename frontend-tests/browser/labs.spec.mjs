@@ -121,6 +121,36 @@ test("PostgreSQL explains diagnostic failures and announces them as alerts", asy
   await expect(page.locator("[data-postgres-result-code]")).toHaveText("unauthorized");
 });
 
+test("PostgreSQL locks authentication and preserves running feedback while a diagnostic is pending", async ({ page }) => {
+  let releaseRequest;
+  const requestGate = new Promise((resolve) => { releaseRequest = resolve; });
+  await page.route("**/api/diagnostics/postgres", async (route) => {
+    await requestGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "success", code: "ok", duration_ms: 2 }),
+    });
+  });
+
+  await page.goto("/en/postgres");
+  const token = page.locator("#postgres-access-token");
+  await token.fill("browser-test-token");
+  await page.getByLabel("Host").fill("203.0.113.10");
+  await page.getByLabel("User").fill("operator");
+  await page.getByLabel("Credential type").selectOption("none");
+  await page.getByLabel("TLS").selectOption("disable");
+  await page.getByRole("button", { name: "Test connection" }).click();
+
+  await expect(token).toBeDisabled();
+  await expect(page.locator("[data-postgres-status]")).toHaveText("Running…");
+  await expect(page.locator('[data-postgres-operation="connect"]')).toHaveText("Running…");
+
+  releaseRequest();
+  await expect(page.locator("[data-postgres-result-title]")).toHaveText("Diagnostic completed");
+  await expect(token).toBeEnabled();
+});
+
 test("PostgreSQL clears local secrets when retained-connection cleanup fails", async ({ page }) => {
   await page.route("**/api/diagnostics/postgres/connections", (route) => route.fulfill({
     status: 201,
@@ -181,6 +211,11 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
       }),
     });
   });
+  await page.route("**/api/diagnostics/postgres/connections/retained-1/operations", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ status: "success", code: "ok", duration_ms: 3 }),
+  }));
   await page.route("**/api/diagnostics/postgres/connections/retained-1", (route) => route.fulfill({ status: 204 }));
 
   await page.goto("/en/postgres");
@@ -201,6 +236,8 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
   await expect(page.locator("[data-postgres-version]")).toHaveText("v0.9.0");
   await expect(page.locator("[data-postgres-correlation-id]")).toHaveText("018f47de-1234-7abc-8def-0123456789ab");
   await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
+  await page.getByRole("button", { name: "Test connection" }).click();
+  await expect(page.locator("[data-postgres-summary]")).toContainText("203.0.113.10:5432");
   await page.getByRole("button", { name: "Destroy retained connection" }).click();
   await expect(page.locator("[data-postgres-status]")).toHaveText("Connection destroyed");
 });

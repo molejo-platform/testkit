@@ -78,6 +78,7 @@ const {
   mountPostgresLab,
   postgresConnectionPayload,
   postgresFormValidation,
+  postgresRetainedViewValues,
   postgresResultPresentation,
   postgresViewState,
 } = await import("../static/postgres-ui.js");
@@ -121,6 +122,43 @@ test("PostgreSQL URI remains an explicit alternative and keeps lifecycle separat
     tls_config: { ca_pem: "certificate" },
     lifecycle: { mode: "ephemeral" },
   });
+});
+
+test("PostgreSQL retained view state excludes local authentication and connection secrets", () => {
+  const retainedURI = postgresRetainedViewValues({
+    token: "sentinel-deployment-token",
+    mode: "uri",
+    uri: "postgresql://operator:sentinel-password@db.example/app?sslmode=verify-full&application_name=sentinel-query",
+    credential_type: "password",
+    credential_secret: "sentinel-credential-secret",
+    ca_pem: "sentinel-private-ca",
+    lifecycle: "retained",
+  });
+  const retainedFields = postgresRetainedViewValues({
+    token: "sentinel-deployment-token",
+    mode: "fields",
+    host: "db.example",
+    port: "5432",
+    user: "operator",
+    credential_type: "password",
+    credential_secret: "sentinel-credential-secret",
+    database: "app",
+    tls: "verify-full",
+    ca_pem: "sentinel-private-ca",
+    lifecycle: "retained",
+  });
+  const serialized = JSON.stringify([retainedURI, retainedFields]);
+
+  assert.equal(serialized.includes("sentinel-deployment-token"), false);
+  assert.equal(serialized.includes("sentinel-password"), false);
+  assert.equal(serialized.includes("sentinel-query"), false);
+  assert.equal(serialized.includes("sentinel-credential-secret"), false);
+  assert.equal(serialized.includes("sentinel-private-ca"), false);
+  assert.equal(retainedURI.mode, "uri");
+  assert.equal(retainedURI.lifecycle, "retained");
+  assert.equal(retainedURI.uri, "postgresql://db.example/app?sslmode=verify-full");
+  assert.equal(retainedFields.host, "db.example");
+  assert.equal(retainedFields.database, "app");
 });
 
 test("PostgreSQL view state derives visibility and requirements without touching the DOM", () => {
