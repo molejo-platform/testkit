@@ -408,6 +408,12 @@ curl --fail --json '{
 As operações disponíveis são `connect`, `arithmetic_check`, `list_databases` e
 `list_schemas`. SQL arbitrário não é aceito.
 
+O navegador informa a duração total e a duração do diagnóstico. A duração total
+é medida no navegador e inclui a troca HTTP e a leitura da resposta. O campo
+`duration_ms` da resposta é medido pelo servidor ao redor do diagnóstico; para
+uma conexão efêmera, inclui abertura, verificação e fechamento da conexão com o
+banco, não apenas a operação SQL fixa.
+
 Todas as requisições de conexão, operação, inspeção e remoção exigem o bearer
 token da implantação. O endpoint de capacidades é somente leitura e não exige.
 Um diagnóstico processado pode retornar HTTP `200` com `status: "failed"`; a

@@ -66,6 +66,12 @@
         </div>
         <pre id="postgres-response-json" data-postgres-response>{{ .T "lab.run_to_see" }}</pre>
       </section>
+      <footer class="lab-output__footer">
+        <span>{{ .T "postgres.total_duration" }} <strong data-postgres-total-duration>—</strong></span>
+        <span>{{ .T "postgres.diagnostic_duration" }} <strong data-postgres-diagnostic-duration>—</strong></span>
+        <span>{{ .T "lab.version" }} <strong data-postgres-version>—</strong></span>
+        <span>{{ .T "lab.correlation_id" }} <strong data-postgres-correlation-id>—</strong></span>
+      </footer>
     </article>
   </section>
   {{ template "page-footer" . }}

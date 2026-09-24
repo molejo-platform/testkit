@@ -409,6 +409,13 @@ curl --fail --json '{
 Las operaciones disponibles son `connect`, `arithmetic_check`, `list_databases`
 y `list_schemas`. No se acepta SQL arbitrario.
 
+El navegador informa la duración total y la duración del diagnóstico. La
+duración total se mide en el navegador e incluye el intercambio HTTP y la
+lectura de la respuesta. El campo `duration_ms` de la respuesta se mide en el
+servidor alrededor del diagnóstico; para una conexión efímera, incluye la
+apertura, la verificación y el cierre de la conexión a la base de datos, no solo
+la operación SQL fija.
+
 Todas las solicitudes de conexión, operación, inspección y eliminación requieren
 el bearer token del deployment. El endpoint de capacidades es read-only y no lo
 requiere. Un diagnóstico procesado puede retornar HTTP `200` con

@@ -1,3 +1,4 @@
+import { createCorrelationID } from "./correlation-id.js";
 import { createFiniteRequestExecutor } from "./finite-request.js";
 import { mountJSONCopyButtons, renderJSON, renderText } from "./json-view.js";
 
@@ -34,7 +35,13 @@ export function postgresConnectionPayload(current) {
   };
 }
 
-export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = globalThis.fetch, timeoutMS = 10_000 } = {}) {
+export function mountPostgresLab(root, {
+  translate = (key) => key,
+  fetchImpl = globalThis.fetch,
+  createCorrelationIDImpl = createCorrelationID,
+  now = () => globalThis.performance.now(),
+  timeoutMS = 10_000,
+} = {}) {
   const form = root.querySelector("[data-postgres-form]");
   const fields = root.querySelector("[data-postgres-fields]");
   const uriField = root.querySelector("[data-postgres-uri]");
@@ -54,6 +61,10 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
   const summary = root.querySelector("[data-postgres-summary]");
   const status = root.querySelector("[data-postgres-status]");
   const responseOutput = root.querySelector("[data-postgres-response]");
+  const totalDuration = root.querySelector("[data-postgres-total-duration]");
+  const diagnosticDuration = root.querySelector("[data-postgres-diagnostic-duration]");
+  const version = root.querySelector("[data-postgres-version]");
+  const correlationIDOutput = root.querySelector("[data-postgres-correlation-id]");
   const executor = createFiniteRequestExecutor({ fetchImpl, timeoutMS });
   let connectionID = null;
   let running = false;
@@ -83,6 +94,7 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     status.textContent = translate("lab.waiting");
     renderText(responseOutput, translate("lab.run_to_see"));
     summary.textContent = safeSummary(values());
+    resetFacts();
   }
   function updateVisibility(reset = true) {
     const current = values();
@@ -105,14 +117,43 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
     setRunning(running);
     if (reset) resetResult();
   }
-  function headers(current, json = true) {
-    return { "Authorization": `Bearer ${current.token}`, ...(json ? { "Content-Type": "application/json" } : {}) };
+  function resetFacts() {
+    totalDuration.textContent = "—";
+    diagnosticDuration.textContent = "—";
+    version.textContent = "—";
+    correlationIDOutput.textContent = "—";
   }
-  function showResult(response, body) {
+  function durationSince(started) {
+    if (started === undefined) return "—";
+    try {
+      return `${Math.max(0, Math.round(now() - started))} ms`;
+    } catch {
+      return "—";
+    }
+  }
+  function headers(current, json = true, correlationID = "") {
+    return {
+      "Authorization": `Bearer ${current.token}`,
+      ...(json ? { "Content-Type": "application/json" } : {}),
+      ...(correlationID ? { "X-Testkit-Correlation-ID": correlationID } : {}),
+    };
+  }
+  async function responseBody(response) {
+    try {
+      return JSON.parse(await response.text());
+    } catch {
+      return { code: "invalid_response" };
+    }
+  }
+  function showResult(response, body, started, requestedCorrelationID) {
     const result = body.result || body;
     const passed = response.ok && result.status === "success";
     status.className = `lab-result-status ${passed ? "lab-result-status--ok" : "lab-result-status--error"}`;
     status.textContent = result.code || body.code || `${response.status}`;
+    totalDuration.textContent = durationSince(started);
+    diagnosticDuration.textContent = Number.isFinite(result.duration_ms) ? `${result.duration_ms} ms` : "—";
+    version.textContent = response.headers.get("testkit-version") || translate("lab.not_available");
+    correlationIDOutput.textContent = response.headers.get("x-testkit-correlation-id") || result.check_id || requestedCorrelationID;
     renderJSON(responseOutput, body);
   }
   async function execute(path, options) {
@@ -129,17 +170,27 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
   async function run(operation) {
     const current = values();
     setRunning(true);
+    resetFacts();
     summary.textContent = safeSummary(current);
     status.className = "lab-result-status lab-result-status--running";
     status.textContent = translate("lab.running");
     renderText(responseOutput, translate("lab.running"));
+    let started;
+    let correlationID;
     try {
+      started = now();
+      correlationID = createCorrelationIDImpl();
+      correlationIDOutput.textContent = correlationID;
       const path = connectionID ? `/api/diagnostics/postgres/connections/${connectionID}/operations` : "/api/diagnostics/postgres";
       const body = connectionID ? { operation } : { operation, connection: postgresConnectionPayload(current) };
-      const response = await execute(path, { method: "POST", headers: headers(current), body: JSON.stringify(body) });
-      if (!response) return;
-      showResult(response, await response.json().catch(() => ({ code: "invalid_response" })));
+      const response = await execute(path, { method: "POST", headers: headers(current, true, correlationID), body: JSON.stringify(body) });
+      if (!response) {
+        totalDuration.textContent = durationSince(started);
+        return;
+      }
+      showResult(response, await responseBody(response), started, correlationID);
     } catch {
+      totalDuration.textContent = durationSince(started);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       renderText(responseOutput, translate("postgres.network_failed"));
@@ -148,15 +199,25 @@ export function mountPostgresLab(root, { translate = (key) => key, fetchImpl = g
   async function createConnection() {
     const current = values();
     setRunning(true);
+    resetFacts();
+    let started;
+    let correlationID;
     try {
+      started = now();
+      correlationID = createCorrelationIDImpl();
+      correlationIDOutput.textContent = correlationID;
       const response = await execute("/api/diagnostics/postgres/connections", {
-        method: "POST", headers: headers(current), body: JSON.stringify({ connection: postgresConnectionPayload(current) }),
+        method: "POST", headers: headers(current, true, correlationID), body: JSON.stringify({ connection: postgresConnectionPayload(current) }),
       });
-      if (!response) return;
-      const body = await response.json().catch(() => ({ code: "invalid_response" }));
+      if (!response) {
+        totalDuration.textContent = durationSince(started);
+        return;
+      }
+      const body = await responseBody(response);
       if (response.ok && body.connection?.id && body.result?.status === "success") connectionID = body.connection.id;
-      showResult(response, body);
+      showResult(response, body, started, correlationID);
     } catch {
+      totalDuration.textContent = durationSince(started);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       renderText(responseOutput, translate("postgres.network_failed"));

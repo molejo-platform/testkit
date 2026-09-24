@@ -193,6 +193,8 @@
 	"postgres.list_schemas": "Listar schemas",
 	"postgres.clear": "Limpar credenciais e resultado",
 	"postgres.effective_target": "Destino efetivo (segredos ocultos)",
+	"postgres.total_duration": "duração total",
+	"postgres.diagnostic_duration": "duração do diagnóstico",
 	"postgres.cancelled": "Diagnóstico cancelado.",
 	"postgres.timeout": "O prazo do diagnóstico foi excedido.",
 	"postgres.network_failed": "Não foi possível alcançar a API de diagnóstico.",

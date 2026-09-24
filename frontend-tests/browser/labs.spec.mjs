@@ -74,10 +74,19 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
     const body = route.request().postDataJSON();
     expect(body.connection.database).toBeUndefined();
     expect(body.connection.credential.type).toBe("none");
-    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({
-      connection: { id: "retained-1", state: "ready" },
-      result: { status: "success", code: "ok", data: { backend_pid: 42 } },
-    }) });
+    expect(route.request().headers()["x-testkit-correlation-id"]).toMatch(/^[0-9a-f-]{36}$/);
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      headers: {
+        "Testkit-Version": "v0.9.0",
+        "X-Testkit-Correlation-ID": "018f47de-1234-7abc-8def-0123456789ab",
+      },
+      body: JSON.stringify({
+        connection: { id: "retained-1", state: "ready" },
+        result: { status: "success", code: "ok", duration_ms: 7.5, data: { backend_pid: 42 } },
+      }),
+    });
   });
   await page.route("**/api/diagnostics/postgres/connections/retained-1", (route) => route.fulfill({ status: 204 }));
 
@@ -93,6 +102,10 @@ test("PostgreSQL reveals fields from capabilities and drives retained lifecycle"
   await expect(page.getByRole("button", { name: "Test connection" })).toBeDisabled();
   await page.getByRole("button", { name: "Create retained connection" }).click();
   await expect(page.locator("[data-postgres-response]")).toContainText("backend_pid");
+  await expect(page.locator("[data-postgres-total-duration]")).toHaveText(/^\d+ ms$/);
+  await expect(page.locator("[data-postgres-diagnostic-duration]")).toHaveText("7.5 ms");
+  await expect(page.locator("[data-postgres-version]")).toHaveText("v0.9.0");
+  await expect(page.locator("[data-postgres-correlation-id]")).toHaveText("018f47de-1234-7abc-8def-0123456789ab");
   await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
   await page.getByRole("button", { name: "Destroy retained connection" }).click();
   await expect(page.locator("[data-postgres-status]")).toHaveText("Connection destroyed");

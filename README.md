@@ -407,6 +407,12 @@ curl --fail --json '{
 Available operations are `connect`, `arithmetic_check`, `list_databases`, and
 `list_schemas`. Arbitrary SQL is not accepted.
 
+The browser reports both total duration and diagnostic duration. Total duration
+is measured in the browser and includes the HTTP exchange and response reading.
+The response `duration_ms` is measured by the server around the diagnostic; for
+an ephemeral connection it includes opening, checking, and closing the database
+connection rather than only the fixed SQL operation.
+
 All connection, operation, inspection, and deletion requests require the bearer
 deployment token. The capabilities endpoint is read-only and does not. A handled
 diagnostic can return HTTP `200` with `status: "failed"`; automation must assert

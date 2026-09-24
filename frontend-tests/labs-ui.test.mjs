@@ -74,7 +74,7 @@ globalThis.document = {
 const { mountRestLab, restPresets } = await import("../static/rest-ui.js");
 const { mountGraphQLLab, graphQLPresets } = await import("../static/graphql-ui.js");
 const { mountSSELab } = await import("../static/sse-ui.js");
-const { postgresConnectionPayload } = await import("../static/postgres-ui.js");
+const { mountPostgresLab, postgresConnectionPayload } = await import("../static/postgres-ui.js");
 
 const browserCorrelationID = "018f47de-1234-7abc-8def-0123456789ab";
 
@@ -114,6 +114,190 @@ test("PostgreSQL URI remains an explicit alternative and keeps lifecycle separat
     uri: "postgresql://operator@db.example/app",
     tls_config: { ca_pem: "certificate" },
     lifecycle: { mode: "ephemeral" },
+  });
+});
+
+function createPostgresRoot(lifecycle = "ephemeral") {
+  const form = new FakeElement();
+  form.formValues = {
+    token: "deployment-token", mode: "fields", host: "db.example", port: "5432",
+    user: "operator", credential_type: "none", credential_secret: "", database: "",
+    tls: "disable", lifecycle, uri: "", ca_pem: "",
+  };
+  const formControls = Object.fromEntries(Object.entries(form.formValues).map(([name, value]) => [name, { value }]));
+  form.elements = { namedItem: (name) => formControls[name] };
+  form.reset = () => {
+    for (const key of Object.keys(form.formValues)) form.formValues[key] = "";
+  };
+
+  const credentialToggle = new FakeElement();
+  credentialToggle.dataset.labelShow = "show";
+  credentialToggle.dataset.labelHide = "hide";
+  credentialToggle.controls = new Map([
+    ["[data-password-icon-show]", new FakeElement()],
+    ["[data-password-icon-hide]", new FakeElement()],
+  ]);
+  const operation = new FakeElement();
+  operation.dataset.postgresOperation = "connect";
+  const selectors = {
+    "[data-postgres-form]": form,
+    "[data-postgres-fields]": new FakeElement(),
+    "[data-postgres-uri]": new FakeElement(),
+    "[data-postgres-credential-secret]": new FakeElement(),
+    "[data-postgres-toggle-secret]": credentialToggle,
+    "[data-postgres-ca]": new FakeElement(),
+    "[data-postgres-cancel]": new FakeElement(),
+    "[data-postgres-clear]": new FakeElement(),
+    "[data-postgres-create]": new FakeElement(),
+    "[data-postgres-destroy]": new FakeElement(),
+    "[data-postgres-output]": new FakeElement(),
+    "[data-postgres-summary]": new FakeElement(),
+    "[data-postgres-status]": new FakeElement(),
+    "[data-postgres-response]": new FakeElement(),
+    "[data-postgres-total-duration]": new FakeElement(),
+    "[data-postgres-diagnostic-duration]": new FakeElement(),
+    "[data-postgres-version]": new FakeElement(),
+    "[data-postgres-correlation-id]": new FakeElement(),
+  };
+  const root = rootFor(selectors, {
+    "[data-postgres-operation]": [operation],
+    "[data-postgres-connection-control]": [],
+    "[data-postgres-capability]": [],
+    "input[name=\"mode\"]": [],
+    "[data-json-copy]": [],
+  });
+  return { root, form, operation, create: selectors["[data-postgres-create]"] };
+}
+
+async function withFakeFormData(run) {
+  const originalFormData = globalThis.FormData;
+  globalThis.FormData = class {
+    constructor(form) { this.form = form; }
+    entries() { return Object.entries(this.form.formValues); }
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.FormData = originalFormData;
+  }
+}
+
+test("PostgreSQL connection renders browser and diagnostic facts", async () => {
+  await withFakeFormData(async () => {
+    const { root, operation } = createPostgresRoot();
+    const calls = [];
+    const responseBody = {
+      schema_version: 1,
+      check_id: browserCorrelationID,
+      provider: "postgres",
+      operation: "connect",
+      status: "success",
+      stage: "operation",
+      code: "ok",
+      duration_ms: 42.35,
+      data: { connected: true, database: "app", user: "operator", tls: "disable", backend_pid: 42 },
+    };
+    const fetchImpl = async (path, options) => {
+      calls.push({ path, options });
+      if (path.endsWith("/capabilities")) return { ok: false };
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (name) => ({
+          "testkit-version": "v0.9.0",
+          "x-testkit-correlation-id": browserCorrelationID,
+        })[name.toLowerCase()] || null },
+        json: async () => responseBody,
+        text: async () => JSON.stringify(responseBody),
+      };
+    };
+
+    mountPostgresLab(root, {
+      fetchImpl,
+      translate: labTranslator,
+      createCorrelationIDImpl: () => browserCorrelationID,
+      now: (() => {
+        const values = [10, 28];
+        return () => values.shift();
+      })(),
+    });
+    operation.dispatch("click");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const diagnosticCall = calls.find(({ path }) => path === "/api/diagnostics/postgres");
+    assert.equal(diagnosticCall.options.headers["X-Testkit-Correlation-ID"], browserCorrelationID);
+    assert.equal(root.controls.get("[data-postgres-total-duration]").textContent, "18 ms");
+    assert.equal(root.controls.get("[data-postgres-diagnostic-duration]").textContent, "42.35 ms");
+    assert.equal(root.controls.get("[data-postgres-version]").textContent, "v0.9.0");
+    assert.equal(root.controls.get("[data-postgres-correlation-id]").textContent, browserCorrelationID);
+    assert.match(root.controls.get("[data-postgres-response]").textContent, /"database": "app"/);
+  });
+});
+
+test("PostgreSQL retained connection reads diagnostic facts from the wrapped result", async () => {
+  await withFakeFormData(async () => {
+    const { root, create } = createPostgresRoot("retained");
+    const responseBody = {
+      connection: { id: "retained-1", state: "ready" },
+      result: { status: "success", code: "ok", duration_ms: 7.5, check_id: browserCorrelationID, data: { backend_pid: 42 } },
+    };
+    const fetchImpl = async (path) => {
+      if (path.endsWith("/capabilities")) return { ok: false };
+      return {
+        ok: true,
+        status: 201,
+        headers: { get: () => null },
+        json: async () => responseBody,
+        text: async () => JSON.stringify(responseBody),
+      };
+    };
+
+    mountPostgresLab(root, {
+      fetchImpl,
+      translate: labTranslator,
+      createCorrelationIDImpl: () => browserCorrelationID,
+      now: (() => {
+        const values = [20, 32];
+        return () => values.shift();
+      })(),
+    });
+    create.dispatch("click");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.controls.get("[data-postgres-total-duration]").textContent, "12 ms");
+    assert.equal(root.controls.get("[data-postgres-diagnostic-duration]").textContent, "7.5 ms");
+    assert.equal(root.controls.get("[data-postgres-correlation-id]").textContent, browserCorrelationID);
+  });
+});
+
+test("PostgreSQL network failures and clearing do not retain diagnostic facts", async () => {
+  await withFakeFormData(async () => {
+    const { root, operation } = createPostgresRoot();
+    const fetchImpl = async (path) => {
+      if (path.endsWith("/capabilities")) return { ok: false };
+      throw new TypeError("Failed to fetch");
+    };
+
+    mountPostgresLab(root, {
+      fetchImpl,
+      translate: labTranslator,
+      createCorrelationIDImpl: () => browserCorrelationID,
+      now: (() => {
+        const values = [5, 15];
+        return () => values.shift();
+      })(),
+    });
+    operation.dispatch("click");
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.controls.get("[data-postgres-total-duration]").textContent, "10 ms");
+    assert.equal(root.controls.get("[data-postgres-diagnostic-duration]").textContent, "—");
+    assert.equal(root.controls.get("[data-postgres-version]").textContent, "—");
+    assert.equal(root.controls.get("[data-postgres-correlation-id]").textContent, browserCorrelationID);
+
+    await root.controls.get("[data-postgres-clear]").dispatch("click");
+    assert.equal(root.controls.get("[data-postgres-total-duration]").textContent, "—");
+    assert.equal(root.controls.get("[data-postgres-correlation-id]").textContent, "—");
   });
 });
 

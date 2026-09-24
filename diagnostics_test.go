@@ -116,8 +116,14 @@ func TestDiagnosticEndpointExecutesAllowedTargetWithoutEchoingSecrets(t *testing
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "success" || result.CheckID == "" {
+	if result.Status != "success" || result.CheckID == "" || result.Provider != "postgres" || result.Operation != "connect" {
 		t.Fatalf("result = %+v", result)
+	}
+	if result.DurationMS < 0 {
+		t.Fatalf("duration_ms = %v, want a non-negative number", result.DurationMS)
+	}
+	if got := response.Header().Get(correlationHeader); got != result.CheckID {
+		t.Fatalf("correlation header = %q, want %q", got, result.CheckID)
 	}
 }
 
