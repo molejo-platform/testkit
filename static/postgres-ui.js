@@ -68,6 +68,7 @@ export function mountPostgresLab(root, {
   const executor = createFiniteRequestExecutor({ fetchImpl, timeoutMS });
   let connectionID = null;
   let running = false;
+  let requestSequence = 0;
 
   function values() { return Object.fromEntries(new FormData(form).entries()); }
   function isRetained() { return values().lifecycle === "retained"; }
@@ -169,6 +170,7 @@ export function mountPostgresLab(root, {
   }
   async function run(operation) {
     const current = values();
+    const requestID = ++requestSequence;
     setRunning(true);
     resetFacts();
     summary.textContent = safeSummary(current);
@@ -184,20 +186,27 @@ export function mountPostgresLab(root, {
       const path = connectionID ? `/api/diagnostics/postgres/connections/${connectionID}/operations` : "/api/diagnostics/postgres";
       const body = connectionID ? { operation } : { operation, connection: postgresConnectionPayload(current) };
       const response = await execute(path, { method: "POST", headers: headers(current, true, correlationID), body: JSON.stringify(body) });
+      if (requestID !== requestSequence) return;
       if (!response) {
         totalDuration.textContent = durationSince(started);
         return;
       }
-      showResult(response, await responseBody(response), started, correlationID);
+      const parsedBody = await responseBody(response);
+      if (requestID !== requestSequence) return;
+      showResult(response, parsedBody, started, correlationID);
     } catch {
+      if (requestID !== requestSequence) return;
       totalDuration.textContent = durationSince(started);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       renderText(responseOutput, translate("postgres.network_failed"));
-    } finally { setRunning(false); }
+    } finally {
+      if (requestID === requestSequence) setRunning(false);
+    }
   }
   async function createConnection() {
     const current = values();
+    const requestID = ++requestSequence;
     setRunning(true);
     resetFacts();
     let started;
@@ -209,33 +218,48 @@ export function mountPostgresLab(root, {
       const response = await execute("/api/diagnostics/postgres/connections", {
         method: "POST", headers: headers(current, true, correlationID), body: JSON.stringify({ connection: postgresConnectionPayload(current) }),
       });
+      if (requestID !== requestSequence) return;
       if (!response) {
         totalDuration.textContent = durationSince(started);
         return;
       }
       const body = await responseBody(response);
+      if (requestID !== requestSequence) return;
       if (response.ok && body.connection?.id && body.result?.status === "success") connectionID = body.connection.id;
       showResult(response, body, started, correlationID);
     } catch {
+      if (requestID !== requestSequence) return;
       totalDuration.textContent = durationSince(started);
       status.className = "lab-result-status lab-result-status--error";
       status.textContent = translate("lab.network_error");
       renderText(responseOutput, translate("postgres.network_failed"));
-    } finally { setRunning(false); updateVisibility(false); }
+    } finally {
+      if (requestID === requestSequence) {
+        setRunning(false);
+        updateVisibility(false);
+      }
+    }
   }
   async function destroyConnection() {
     if (!connectionID) return;
     const current = values();
+    const requestID = ++requestSequence;
     setRunning(true);
     try {
       const response = await execute(`/api/diagnostics/postgres/connections/${connectionID}`, { method: "DELETE", headers: headers(current, false) });
+      if (requestID !== requestSequence) return;
       if (response?.ok) {
         connectionID = null;
         status.className = "lab-result-status lab-result-status--ok";
         status.textContent = translate("postgres.destroyed");
         renderText(responseOutput, translate("postgres.destroyed_detail"));
       }
-    } finally { setRunning(false); updateVisibility(false); }
+    } finally {
+      if (requestID === requestSequence) {
+        setRunning(false);
+        updateVisibility(false);
+      }
+    }
   }
   async function applyCapabilities() {
     try {
@@ -261,7 +285,7 @@ export function mountPostgresLab(root, {
   credentialSecretToggle.addEventListener("click", () => setCredentialSecretVisible(credentialSecretInput.type === "password"));
   form.addEventListener("input", updateVisibility);
   cancelButton.addEventListener("click", () => {
-    executor.cancel();
+    if (!executor.cancel()) return;
     setRunning(false);
     status.className = "lab-result-status lab-result-status--error";
     status.textContent = translate("lab.cancelled");

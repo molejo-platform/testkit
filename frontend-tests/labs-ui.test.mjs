@@ -301,6 +301,60 @@ test("PostgreSQL network failures and clearing do not retain diagnostic facts", 
   });
 });
 
+test("PostgreSQL cancellation cannot let a stale request overwrite an immediate retry", async () => {
+  await withFakeFormData(async () => {
+    const { root, operation } = createPostgresRoot();
+    let diagnosticCalls = 0;
+    let resolveRetry;
+    const responseBody = {
+      status: "success", code: "ok", duration_ms: 4, check_id: browserCorrelationID,
+      data: { connected: true },
+    };
+    const response = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => JSON.stringify(responseBody),
+    };
+    const fetchImpl = async (path, options) => {
+      if (path.endsWith("/capabilities")) return { ok: false };
+      diagnosticCalls += 1;
+      if (diagnosticCalls === 1) {
+        return new Promise((_, reject) => {
+          options.signal.addEventListener("abort", () => reject(new Error("cancelled")));
+        });
+      }
+      return new Promise((resolve) => { resolveRetry = () => resolve(response); });
+    };
+
+    mountPostgresLab(root, {
+      fetchImpl,
+      translate: labTranslator,
+      createCorrelationIDImpl: () => browserCorrelationID,
+      now: (() => {
+        let value = 0;
+        return () => { value += 10; return value; };
+      })(),
+    });
+
+    const cancelled = operation.dispatch("click");
+    root.controls.get("[data-postgres-cancel]").dispatch("click");
+    const retry = operation.dispatch("click");
+    await cancelled;
+
+    const disabledWhilePending = operation.disabled;
+    const totalWhilePending = root.controls.get("[data-postgres-total-duration]").textContent;
+    resolveRetry();
+    await retry;
+
+    assert.equal(diagnosticCalls, 2);
+    assert.equal(disabledWhilePending, true);
+    assert.equal(totalWhilePending, "—");
+    assert.equal(operation.disabled, false);
+    assert.equal(root.controls.get("[data-postgres-diagnostic-duration]").textContent, "4 ms");
+  });
+});
+
 function createHTTPRoot(prefix, names = ["status", "items", "echo", "invalid"]) {
   const buttons = names.map((name) => {
     const button = new FakeElement();
