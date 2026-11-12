@@ -175,7 +175,8 @@ without turning a public HTTP endpoint into a general-purpose proxy:
 docker run --rm "$TESTKIT_IMAGE" probe https://example.com/
 ```
 
-It writes one JSON result and uses these automation-safe exit codes:
+On success, the command writes one JSON result to `stdout`. A valid probe
+command emits a separate `probe.completed` event to `stderr`.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -516,6 +517,43 @@ diagnostic token, and a writable volume plus `fsGroup: 65532` for persistence.
 The embedded version is exposed through responses, logs, browser pages, and the
 `Testkit-Version` header. Use it to distinguish the image actually running from
 the manifests or source checkout you expected to deploy.
+
+## Structured logs
+
+Server events are newline-delimited JSON on `stdout` and include `service`,
+`version`, `level`, and `event`. Probe events use the same format on `stderr`.
+
+| Event | What it records |
+| --- | --- |
+| `http.request.completed` | HTTP method, fixed route, status code, response bytes, and handler duration. |
+| `graphql.operation.completed` | Duration and result of GraphQL execution, including an error count when the HTTP response is `200`. |
+| `diagnostic.completed` | PostgreSQL operation, lifecycle, status, stage, code, and execution duration. Ephemeral execution includes opening and closing the database connection. |
+| `diagnostic.rejected` | Rejection stage, code, and HTTP status. The HTTP access event provides handler duration. |
+| `connection.opened`, `connection.closed`, `connection.rejected` | SSE and WebSocket lifecycle, with the session duration on close and a reason on close or rejection. |
+| `probe.completed` | Probe duration, status, code, and upstream HTTP status when available. |
+
+All durations are numeric milliseconds. Successful outcomes and normal closes
+use `INFO`. Operation failures and relevant rejections use `WARN`. Internal
+errors use `ERROR`. HTTP access events use `INFO`, with `ERROR` for `5xx`.
+
+To inspect a PostgreSQL run, copy `X-Testkit-Correlation-ID` from the response
+and filter both events by `correlation_id` in Grafana Explore. Replace the
+selector with the labels used for the workload and the placeholder with the ID.
+
+```logql
+{app="molejo-testkit"} | json | __error__="" | correlation_id="<uuid>"
+```
+
+To find failed PostgreSQL runs and rejections, including failures that returned
+HTTP `200`, filter the diagnostic events by their outcome.
+
+```logql
+{app="molejo-testkit"} | json | __error__="" | event=~"diagnostic.completed|diagnostic.rejected" | status!="success"
+```
+
+If Explore only displays the message, open the raw line and compare it with
+`kubectl logs` for the same container and time. Keep correlation IDs as JSON
+fields or structured metadata.
 
 ## Troubleshooting startup
 
