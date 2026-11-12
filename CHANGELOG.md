@@ -9,6 +9,33 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 No changes yet.
 
+## [0.12.0] - 2026-11-12
+
+### Added
+
+- GraphQL operation logs record duration and error counts and share a
+  correlation ID with the HTTP access event.
+- PostgreSQL diagnostic logs include execution stage, connection lifecycle,
+  and the HTTP correlation ID. Rejected requests have a dedicated event with
+  a stage and a reason code.
+- SSE and WebSocket logs include close and rejection reasons.
+- The consumer guides document the structured events and provide LogQL
+  examples for correlating requests and finding failed diagnostics.
+
+### Changed
+
+- The outbound probe emits a structured result log on stderr with duration and
+  upstream status when available. The JSON result on stdout and exit codes
+  remain compatible with existing callers.
+- HTTP 5xx access events use the error level. GraphQL and PostgreSQL operation
+  failures are visible independently of their HTTP status.
+
+### Security
+
+- Probe failure logs use stable codes and omit raw upstream errors that can
+  contain request URLs and query parameters.
+- CI and release builds use Go 1.26.11 for standard library security fixes.
+
 ## [0.11.0] - 2026-09-24
 
 ### Added
@@ -287,7 +314,8 @@ No changes yet.
 
 - Initial multi-platform image publication workflow for GitHub Container Registry.
 
-[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/molejo-platform/testkit/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/molejo-platform/testkit/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/molejo-platform/testkit/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/molejo-platform/testkit/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/molejo-platform/testkit/compare/v0.8.0...v0.9.0
