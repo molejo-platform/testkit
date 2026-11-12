@@ -261,11 +261,12 @@ func TestCheckPeerIgnoresProxyEnvironment(t *testing.T) {
 	t.Setenv("NO_PROXY", "")
 
 	result := checkPeer(context.Background(), peer{Name: "target", Scheme: "http", Host: "does-not-exist.invalid", Port: 8080, ExpectedInstanceID: "target"}, 100*time.Millisecond)
-	if result.Reason != peerReasonDNSFailed {
-		t.Fatalf("peer check reason = %q, want %q", result.Reason, peerReasonDNSFailed)
-	}
 	if proxyRequests.Load() != 0 {
 		t.Fatal("peer check used the proxy configured in the environment")
+	}
+	// A slow resolver can exhaust the deadline before reporting a DNS failure.
+	if result.Outcome != peerUnreachable {
+		t.Fatalf("peer check outcome = %q, reason = %q; want %q", result.Outcome, result.Reason, peerUnreachable)
 	}
 }
 
