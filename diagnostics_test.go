@@ -13,10 +13,16 @@ import (
 	"time"
 )
 
-type fakePostgresExecutor struct{ calls int }
+type fakePostgresExecutor struct {
+	calls  int
+	result diagnosticResult
+}
 
 func (executor *fakePostgresExecutor) Execute(_ context.Context, _ postgresDiagnosticRequest, _ validatedTarget) diagnosticResult {
 	executor.calls++
+	if executor.result.Status != "" {
+		return executor.result
+	}
 	return successfulPostgresResult(map[string]any{"connected": true})
 }
 
@@ -124,6 +130,55 @@ func TestDiagnosticEndpointExecutesAllowedTargetWithoutEchoingSecrets(t *testing
 	}
 	if got := response.Header().Get(correlationHeader); got != result.CheckID {
 		t.Fatalf("correlation header = %q, want %q", got, result.CheckID)
+	}
+}
+
+func TestDiagnosticOutcomeLogs(t *testing.T) {
+	for _, test := range []struct {
+		name, event, status, stage, code, level string
+		result                                  diagnosticResult
+		httpStatus                              int
+	}{
+		{"success", "diagnostic.completed", "success", "operation", "ok", "INFO", diagnosticResult{}, 200},
+		{"failed", "diagnostic.completed", "failed", "authentication", "authentication_failed", "WARN", failedPostgresResult("authentication", "authentication_failed"), 200},
+		{"timeout", "diagnostic.completed", "timeout", "operation", "deadline_exceeded", "WARN", classifyPostgresError(context.Background(), context.DeadlineExceeded), 200},
+		{"cancelled", "diagnostic.completed", "cancelled", "operation", "cancelled", "WARN", classifyPostgresError(context.Background(), context.Canceled), 200},
+		{"unauthorized", "diagnostic.rejected", "rejected", "authorization", "unauthorized", "WARN", diagnosticResult{}, 401},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, executor := testDiagnosticService(t)
+			executor.result = test.result
+			logger, output := newTestLogger()
+			service.logger = logger
+			request := diagnosticRequest(`{"operation":"connect","connection":{"host":"203.0.113.10","user":"private-user","password":"private-password","tls":"disable"}}`)
+			if test.httpStatus == http.StatusUnauthorized {
+				request.Header.Set("Authorization", "Bearer private-token")
+			}
+			response := httptest.NewRecorder()
+			newHandlerWithConfig(handlerConfig{diagnostics: service, logger: logger}).ServeHTTP(response, request)
+			id := response.Header().Get(correlationHeader)
+			records := logRecords(t, output)
+			if response.Code != test.httpStatus || !isUUIDv7(id) || len(records) != 2 {
+				t.Fatalf("status = %d, ID = %q, logs = %s", response.Code, id, output.String())
+			}
+			event, access := records[0], records[1]
+			if event["event"] != test.event || event["status"] != test.status || event["stage"] != test.stage ||
+				event["code"] != test.code || event["level"] != test.level || event["correlation_id"] != id ||
+				access["event"] != "http.request.completed" || access["correlation_id"] != id {
+				t.Fatalf("unexpected diagnostic logs: %s", output.String())
+			}
+			if test.event == "diagnostic.completed" {
+				duration, ok := event["duration_ms"].(float64)
+				if !ok || duration < 0 || event["check_id"] != id || event["lifecycle"] != "ephemeral" {
+					t.Fatalf("unexpected completion fields: %#v", event)
+				}
+			}
+			for _, secret := range []string{"203.0.113.10", "private-user", "private-password", "private-token", "0123456789abcdef"} {
+				if strings.Contains(output.String(), secret) {
+					t.Fatalf("diagnostic log includes sensitive request data")
+				}
+			}
+		})
 	}
 }
 

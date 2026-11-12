@@ -127,9 +127,11 @@ func TestPostgresCapabilitiesDescribeContract(t *testing.T) {
 
 func TestPostgresRetainedConnectionHTTPContract(t *testing.T) {
 	service, _ := testDiagnosticService(t)
+	logger, output := newTestLogger()
+	service.logger = logger
 	opener := &fakePostgresOpener{}
 	service.registry = newPostgresConnectionRegistry(opener)
-	handler := newHandlerWithConfig(handlerConfig{diagnostics: service})
+	handler := newHandlerWithConfig(handlerConfig{diagnostics: service, logger: logger})
 	body := `{"connection":{"target":{"host":"203.0.113.10"},"identity":{"user":"operator"},"credential":{"type":"password","secret":"sentinel-secret"},"tls_config":{"mode":"disable"},"lifecycle":{"mode":"retained"}}}`
 	create := diagnosticRequestFor(http.MethodPost, "/api/diagnostics/postgres/connections", body)
 	response := httptest.NewRecorder()
@@ -146,6 +148,15 @@ func TestPostgresRetainedConnectionHTTPContract(t *testing.T) {
 	handler.ServeHTTP(response, diagnosticRequestFor(http.MethodPost, operationPath, `{"operation":"controlled_delay"}`))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "controlled_delay") {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	records := recordsForEvent(logRecords(t, output), "diagnostic.completed")
+	if len(records) != 2 || records[0]["operation"] != "connect" || records[1]["operation"] != "controlled_delay" ||
+		records[0]["lifecycle"] != "retained" || records[1]["lifecycle"] != "retained" ||
+		records[1]["correlation_id"] != response.Header().Get(correlationHeader) {
+		t.Fatalf("retained diagnostic logs: %#v", records)
+	}
+	if strings.Contains(output.String(), created.Connection.ID) || strings.Contains(output.String(), "sentinel-secret") {
+		t.Fatal("retained connection data leaked into logs")
 	}
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, diagnosticRequestFor(http.MethodDelete, "/api/diagnostics/postgres/connections/"+created.Connection.ID, ""))

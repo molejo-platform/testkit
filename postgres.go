@@ -332,7 +332,11 @@ func (executor *postgresExecutor) Open(ctx context.Context, resolved postgresCon
 	}
 	connection, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
-		return nil, classifyPostgresError(ctx, err)
+		result := classifyPostgresError(ctx, err)
+		if result.Stage == "unknown" || result.Stage == "operation" {
+			result.logStage = "connection"
+		}
+		return nil, result
 	}
 	return &pgxPostgresConnection{connection: connection}, diagnosticResult{}
 }
