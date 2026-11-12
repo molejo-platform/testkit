@@ -64,6 +64,10 @@ func TestRunProbeRequestsControlledHTTPDestination(t *testing.T) {
 	if payload.UpstreamStatus != http.StatusOK || payload.UpstreamBody != "controlled-upstream" {
 		t.Fatalf("unexpected probe output: %#v", payload)
 	}
+	assertProbeLog(t, &stderr, "success", "ok", "INFO", http.StatusOK)
+	if strings.Contains(stderr.String(), "controlled-upstream") || strings.Contains(stderr.String(), upstream.URL) {
+		t.Fatal("upstream data leaked into probe logs")
+	}
 }
 
 func TestRunProbeRejectsInvalidArguments(t *testing.T) {
@@ -89,6 +93,45 @@ func TestRunProbeReturnsFailureForUnhealthyDestination(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty output", stdout.String())
+	}
+	assertProbeLog(t, &stderr, "failed", "upstream_status", "WARN", http.StatusServiceUnavailable)
+}
+
+func TestRunProbeLogsTimeoutWithoutURL(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("expired probe reached upstream")
+	}))
+	t.Cleanup(upstream.Close)
+
+	var stdout, stderr bytes.Buffer
+	if exitCode := runProbe(ctx, []string{upstream.URL + "/?token=private-sentinel"}, &stdout, &stderr); exitCode != 1 || stdout.Len() != 0 {
+		t.Fatalf("exit code = %d, stdout = %q", exitCode, stdout.String())
+	}
+	assertProbeLog(t, &stderr, "failed", "deadline_exceeded", "WARN", 0)
+	if strings.Contains(stderr.String(), "private-sentinel") || strings.Contains(stderr.String(), upstream.URL) {
+		t.Fatal("URL leaked into probe logs")
+	}
+}
+
+func assertProbeLog(t *testing.T, stderr *bytes.Buffer, status, code, level string, upstreamStatus int) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	var record map[string]any
+	if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &record) != nil {
+		t.Fatalf("expected a single JSON probe event, got %q", stderr.String())
+	}
+	id, _ := record["correlation_id"].(string)
+	duration, hasDuration := record["duration_ms"].(float64)
+	if record["event"] != "probe.completed" || record["status"] != status || record["code"] != code ||
+		record["level"] != level || record["service"] != "molejo-testkit" || record["version"] != version ||
+		!isUUIDv7(id) || !hasDuration || duration < 0 {
+		t.Fatalf("unexpected probe log: %#v", record)
+	}
+	if got := record["upstream_status_code"]; (upstreamStatus == 0 && got != nil) ||
+		(upstreamStatus != 0 && got != float64(upstreamStatus)) {
+		t.Fatalf("upstream status code = %#v, want %d when present", got, upstreamStatus)
 	}
 }
 

@@ -242,6 +242,13 @@ func staticAssetVersionFromFS(files fs.FS) (string, error) {
 	return hex.EncodeToString(digest.Sum(nil)[:16]), nil
 }
 
+func newLogger(output io.Writer) *slog.Logger {
+	return slog.New(slog.NewJSONHandler(output, nil)).With(
+		"service", "molejo-testkit",
+		"version", version,
+	)
+}
+
 func main() {
 	if len(os.Args) > 1 {
 		if os.Args[1] == "probe" {
@@ -251,10 +258,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With(
-		"service", "molejo-testkit",
-		"version", version,
-	)
+	logger := newLogger(os.Stdout)
 	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
