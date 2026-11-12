@@ -38,7 +38,7 @@ type failingFlusherWriter struct {
 }
 
 type blockingConnectionCloseHandler struct {
-	closeStarted chan struct{}
+	closeStarted chan string
 	releaseClose chan struct{}
 	closeOnce    sync.Once
 }
@@ -48,15 +48,18 @@ func (handler *blockingConnectionCloseHandler) Enabled(context.Context, slog.Lev
 }
 
 func (handler *blockingConnectionCloseHandler) Handle(_ context.Context, record slog.Record) error {
-	protocol := ""
+	protocol, reason := "", ""
 	record.Attrs(func(attribute slog.Attr) bool {
 		if attribute.Key == "protocol" {
 			protocol = attribute.Value.String()
 		}
+		if attribute.Key == "reason" {
+			reason = attribute.Value.String()
+		}
 		return true
 	})
 	if record.Message == "connection closed" && protocol == protocolWebSocket {
-		handler.closeOnce.Do(func() { close(handler.closeStarted) })
+		handler.closeOnce.Do(func() { handler.closeStarted <- reason })
 		<-handler.releaseClose
 	}
 	return nil
@@ -440,7 +443,7 @@ func TestConcurrentConnectionFactsCarryTransitionOrder(t *testing.T) {
 	logger, output := newTestLogger()
 	var stats connectionStats
 	start := make(chan struct{})
-	connections := make(chan func(), connectionCount)
+	connections := make(chan func(string), connectionCount)
 	var waitGroup sync.WaitGroup
 	for range connectionCount {
 		waitGroup.Add(1)
@@ -453,13 +456,13 @@ func TestConcurrentConnectionFactsCarryTransitionOrder(t *testing.T) {
 	close(start)
 	waitGroup.Wait()
 	close(connections)
-	closeConnections := make([]func(), 0, connectionCount)
+	closeConnections := make([]func(string), 0, connectionCount)
 	for closeConnection := range connections {
 		closeConnections = append(closeConnections, closeConnection)
 	}
 	t.Cleanup(func() {
 		for _, closeConnection := range closeConnections {
-			closeConnection()
+			closeConnection("normal_close")
 		}
 	})
 
@@ -527,7 +530,7 @@ func TestActiveConnectionReporterLogsOnTickAndStopsWhenTicksClose(t *testing.T) 
 
 func TestServeWaitsForWebSocketCloseFactDuringShutdown(t *testing.T) {
 	handler := &blockingConnectionCloseHandler{
-		closeStarted: make(chan struct{}),
+		closeStarted: make(chan string, 1),
 		releaseClose: make(chan struct{}),
 	}
 	var releaseOnce sync.Once
@@ -571,7 +574,10 @@ func TestServeWaitsForWebSocketCloseFactDuringShutdown(t *testing.T) {
 
 	cancel()
 	select {
-	case <-handler.closeStarted:
+	case reason := <-handler.closeStarted:
+		if reason != "shutdown" {
+			t.Fatalf("WebSocket close reason = %q", reason)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for WebSocket close fact")
 	}
@@ -613,8 +619,10 @@ func TestRejectedTransportsDoNotBecomeActiveConnections(t *testing.T) {
 		if webSocketActive != 0 || sseActive != 0 {
 			t.Fatalf("active connections = (%d, %d), want (0, 0)", webSocketActive, sseActive)
 		}
-		if records := logRecords(t, output); len(records) != 0 {
-			t.Fatalf("rejected SSE emitted connection facts: %s", output.String())
+		records := logRecords(t, output)
+		if len(records) != 1 || records[0]["event"] != "connection.rejected" ||
+			records[0]["reason"] != "unsupported_streaming" || records[0]["level"] != "ERROR" {
+			t.Fatalf("unexpected rejection logs: %s", output.String())
 		}
 	})
 
@@ -633,8 +641,10 @@ func TestRejectedTransportsDoNotBecomeActiveConnections(t *testing.T) {
 		if webSocketActive != 0 || sseActive != 0 {
 			t.Fatalf("active connections = (%d, %d), want (0, 0)", webSocketActive, sseActive)
 		}
-		if records := logRecords(t, output); len(records) != 0 {
-			t.Fatalf("rejected WebSocket emitted connection facts: %s", output.String())
+		records := logRecords(t, output)
+		if len(records) != 1 || records[0]["event"] != "connection.rejected" ||
+			records[0]["reason"] != "upgrade_failed" || records[0]["level"] != "WARN" {
+			t.Fatalf("unexpected rejection logs: %s", output.String())
 		}
 	})
 
@@ -654,8 +664,10 @@ func TestRejectedTransportsDoNotBecomeActiveConnections(t *testing.T) {
 		if webSocketActive != 0 || sseActive != 0 {
 			t.Fatalf("active connections = (%d, %d), want (0, 0)", webSocketActive, sseActive)
 		}
-		if records := logRecords(t, output); len(records) != 0 {
-			t.Fatalf("rejected WebSocket emitted connection facts: %s", output.String())
+		records := waitForLogEvent(t, output, "connection.rejected", 1)
+		if len(records) != 1 || records[0]["event"] != "connection.rejected" ||
+			records[0]["reason"] != "shutdown" || records[0]["level"] != "INFO" {
+			t.Fatalf("unexpected rejection logs: %s", output.String())
 		}
 	})
 }
@@ -676,7 +688,8 @@ func TestSSEWriteFailureClosesOperationalFact(t *testing.T) {
 	if len(opened) != 1 || opened[0]["protocol_active"] != float64(1) || opened[0]["connection_sequence"] != float64(1) {
 		t.Fatalf("opened facts = %#v, want one active SSE", opened)
 	}
-	if len(closed) != 1 || closed[0]["protocol_active"] != float64(0) || closed[0]["total_active"] != float64(0) || closed[0]["connection_sequence"] != float64(2) {
+	if len(closed) != 1 || closed[0]["protocol_active"] != float64(0) || closed[0]["total_active"] != float64(0) || closed[0]["connection_sequence"] != float64(2) ||
+		closed[0]["reason"] != "transport_error" || closed[0]["level"] != "WARN" {
 		t.Fatalf("closed facts = %#v, want no active connections", closed)
 	}
 	webSocketActive, sseActive, _ := stats.snapshot()
@@ -1378,7 +1391,8 @@ func TestSSEConnectionLogsLifecycle(t *testing.T) {
 	_ = responseValue.Body.Close()
 	records = waitForLogEvent(t, output, "connection.closed", 1)
 	closed := records[len(records)-1]
-	if closed["protocol"] != "sse" || closed["protocol_active"] != float64(0) || closed["connection_sequence"] != float64(2) || closed["correlation_id"] != suppliedCorrelationID {
+	if closed["protocol"] != "sse" || closed["protocol_active"] != float64(0) || closed["connection_sequence"] != float64(2) || closed["correlation_id"] != suppliedCorrelationID ||
+		closed["reason"] != "client_disconnected" || closed["level"] != "INFO" {
 		t.Fatalf("closed SSE log = %#v", closed)
 	}
 	if duration, ok := closed["duration_ms"].(float64); !ok || duration < 0 {
@@ -1484,18 +1498,25 @@ func TestWebSocketConnectionLogsLifecycle(t *testing.T) {
 		t.Fatalf("dial WebSocket: %v", err)
 	}
 
+	t.Cleanup(func() { _ = connection.Close() })
+
 	records := waitForLogEvent(t, output, "connection.opened", 1)
 	opened := records[len(records)-1]
 	if opened["protocol"] != "websocket" || opened["protocol_active"] != float64(1) || opened["connection_sequence"] != float64(1) || opened["correlation_id"] != suppliedCorrelationID {
 		t.Fatalf("opened WebSocket log = %#v", opened)
 	}
-	if err := connection.Close(); err != nil {
-		t.Fatalf("close WebSocket: %v", err)
+	if err := connection.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "private-close-reason"), time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("send WebSocket close: %v", err)
 	}
 	records = waitForLogEvent(t, output, "connection.closed", 1)
 	closed := records[len(records)-1]
-	if closed["protocol"] != "websocket" || closed["protocol_active"] != float64(0) || closed["connection_sequence"] != float64(2) || closed["correlation_id"] != suppliedCorrelationID {
+	if closed["protocol"] != "websocket" || closed["protocol_active"] != float64(0) || closed["connection_sequence"] != float64(2) || closed["correlation_id"] != suppliedCorrelationID ||
+		closed["reason"] != "normal_close" || closed["level"] != "INFO" {
 		t.Fatalf("closed WebSocket log = %#v", closed)
+	}
+	if strings.Contains(output.String(), "private-close-reason") {
+		t.Fatal("WebSocket close text leaked into logs")
 	}
 	if duration, ok := closed["duration_ms"].(float64); !ok || duration < 0 {
 		t.Fatalf("WebSocket duration_ms = %#v, want a non-negative number", closed["duration_ms"])

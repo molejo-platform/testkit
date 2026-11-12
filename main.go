@@ -277,7 +277,11 @@ func main() {
 	logger.Info("server stopped", "event", "server.stopped")
 }
 
+var errServerShutdown = errors.New("server shutdown")
+
 func serve(ctx context.Context, listener net.Listener, app *application) error {
+	requestContext, cancelRequests := context.WithCancelCause(context.WithoutCancel(ctx))
+	defer cancelRequests(errServerShutdown)
 	server := &http.Server{
 		Handler:           app.handler,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -285,7 +289,7 @@ func serve(ctx context.Context, listener net.Listener, app *application) error {
 		WriteTimeout:      0,
 		IdleTimeout:       30 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
-			return ctx
+			return requestContext
 		},
 	}
 	reporterCtx, stopReporter := context.WithCancel(ctx)
@@ -320,6 +324,7 @@ func serve(ctx context.Context, listener net.Listener, app *application) error {
 
 	select {
 	case err := <-serveResult:
+		cancelRequests(errServerShutdown)
 		app.close()
 		closeCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -335,6 +340,7 @@ func serve(ctx context.Context, listener net.Listener, app *application) error {
 		}
 		return err
 	case <-ctx.Done():
+		cancelRequests(errServerShutdown)
 		app.close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -713,7 +719,7 @@ func staticAsset(writer http.ResponseWriter, request *http.Request) {
 	http.ServeContent(writer, request, assetPath, time.Time{}, bytes.NewReader(data))
 }
 
-func observeConnection(ctx context.Context, logger *slog.Logger, stats *connectionStats, protocol, route, correlationID string) func() {
+func observeConnection(ctx context.Context, logger *slog.Logger, stats *connectionStats, protocol, route, correlationID string) func(string) {
 	started := time.Now()
 	protocolActive, totalActive, sequence := stats.change(protocol, 1)
 	logger.InfoContext(ctx, "connection opened",
@@ -725,9 +731,16 @@ func observeConnection(ctx context.Context, logger *slog.Logger, stats *connecti
 		"connection_sequence", sequence,
 		"correlation_id", correlationID,
 	)
-	return func() {
+	return func(reason string) {
 		protocolActive, totalActive, sequence := stats.change(protocol, -1)
-		logger.InfoContext(ctx, "connection closed",
+		level := slog.LevelInfo
+		switch reason {
+		case "transport_error":
+			level = slog.LevelWarn
+		case "encoding_error":
+			level = slog.LevelError
+		}
+		logger.Log(ctx, level, "connection closed",
 			"event", "connection.closed",
 			"protocol", protocol,
 			"route", route,
@@ -736,13 +749,22 @@ func observeConnection(ctx context.Context, logger *slog.Logger, stats *connecti
 			"connection_sequence", sequence,
 			"duration_ms", durationMilliseconds(time.Since(started)),
 			"correlation_id", correlationID,
+			"reason", reason,
 		)
 	}
 }
 
+func logConnectionRejection(ctx context.Context, logger *slog.Logger, level slog.Level, protocol, route, correlationID, reason string) {
+	logger.Log(ctx, level, "connection rejected",
+		"event", "connection.rejected", "protocol", protocol, "route", route,
+		"correlation_id", correlationID, "reason", reason)
+}
+
 func events(writer http.ResponseWriter, request *http.Request, interval time.Duration, logger *slog.Logger, stats *connectionStats) {
-	flusher, ok := writer.(http.Flusher)
-	if !ok {
+	ctx := request.Context()
+	correlationID := resolveCorrelationID(request.URL.Query().Get(correlationQuery))
+	if _, ok := writer.(http.Flusher); !ok {
+		logConnectionRejection(ctx, logger, slog.LevelError, protocolSSE, "/events", correlationID, "unsupported_streaming")
 		http.Error(writer, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
@@ -751,23 +773,38 @@ func events(writer http.ResponseWriter, request *http.Request, interval time.Dur
 	writer.Header().Set("Connection", "keep-alive")
 	writer.Header().Set("X-Accel-Buffering", "no")
 	writer.WriteHeader(http.StatusOK)
-	correlationID := resolveCorrelationID(request.URL.Query().Get(correlationQuery))
-	connectionClosed := observeConnection(request.Context(), logger, stats, protocolSSE, "/events", correlationID)
-	defer connectionClosed()
+	connectionClosed := observeConnection(ctx, logger, stats, protocolSSE, "/events", correlationID)
+	reason := "client_disconnected"
+	defer func() {
+		if errors.Is(context.Cause(ctx), errServerShutdown) {
+			reason = "shutdown"
+		}
+		connectionClosed(reason)
+	}()
 
+	controller := http.NewResponseController(writer)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for sequence := 1; ; sequence++ {
 		data, err := json.Marshal(response{Status: "ok", Version: version})
 		if err != nil {
+			reason = "encoding_error"
 			return
 		}
 		if _, err := fmt.Fprintf(writer, "id: %d\nevent: status\ndata: %s\n\n", sequence, data); err != nil {
+			if ctx.Err() == nil {
+				reason = "transport_error"
+			}
 			return
 		}
-		flusher.Flush()
+		if err := controller.Flush(); err != nil {
+			if ctx.Err() == nil {
+				reason = "transport_error"
+			}
+			return
+		}
 		select {
-		case <-request.Context().Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
@@ -881,29 +918,36 @@ func sameWebSocketOrigin(request *http.Request) bool {
 }
 
 func webSocket(writer http.ResponseWriter, request *http.Request, hub *webSocketHub, logger *slog.Logger, stats *connectionStats) {
+	ctx := request.Context()
+	correlationID := resolveCorrelationID(request.URL.Query().Get(correlationQuery))
 	connection, err := webSocketUpgrader.Upgrade(writer, request, http.Header{versionHeader: []string{version}})
 	if err != nil {
+		logConnectionRejection(ctx, logger, slog.LevelWarn, protocolWebSocket, "/ws", correlationID, "upgrade_failed")
 		return
 	}
 	client := &wsClient{hub: hub, conn: connection, send: make(chan []byte, 16)}
 	if !client.hub.register(client) {
 		_ = connection.Close()
+		logConnectionRejection(ctx, logger, slog.LevelInfo, protocolWebSocket, "/ws", correlationID, "shutdown")
 		return
 	}
 	defer client.hub.handlerDone()
-	correlationID := resolveCorrelationID(request.URL.Query().Get(correlationQuery))
-	connectionClosed := observeConnection(request.Context(), logger, stats, protocolWebSocket, "/ws", correlationID)
+	connectionClosed := observeConnection(ctx, logger, stats, protocolWebSocket, "/ws", correlationID)
+	reason := "transport_error"
 	defer func() {
 		client.hub.unregister(client)
 		_ = connection.Close()
-		connectionClosed()
+		if errors.Is(context.Cause(ctx), errServerShutdown) {
+			reason = "shutdown"
+		}
+		connectionClosed(reason)
 	}()
 
 	go client.writePump()
-	client.readPump()
+	reason = client.readPump()
 }
 
-func (client *wsClient) readPump() {
+func (client *wsClient) readPump() string {
 	client.conn.SetReadLimit(maxWebSocketBytes)
 	_ = client.conn.SetReadDeadline(time.Now().Add(pongWait))
 	client.conn.SetPongHandler(func(string) error {
@@ -914,11 +958,14 @@ func (client *wsClient) readPump() {
 			Message string `json:"message"`
 		}
 		if err := client.conn.ReadJSON(&payload); err != nil {
-			return
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+				return "normal_close"
+			}
+			return "transport_error"
 		}
 		message, err := json.Marshal(wsMessage{Message: payload.Message, Version: version})
 		if err != nil {
-			return
+			return "encoding_error"
 		}
 		client.hub.send(message)
 	}
