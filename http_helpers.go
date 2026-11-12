@@ -47,7 +47,11 @@ func logHTTPRequest(logger *slog.Logger, route string, handler http.HandlerFunc)
 		if statusCode == 0 {
 			statusCode = http.StatusOK
 		}
-		logger.InfoContext(request.Context(), "HTTP request completed", "event", "http.request.completed",
+		level := slog.LevelInfo
+		if statusCode >= http.StatusInternalServerError {
+			level = slog.LevelError
+		}
+		logger.Log(request.Context(), level, "HTTP request completed", "event", "http.request.completed",
 			"http_method", request.Method, "route", route, "status_code", statusCode,
 			"duration_ms", durationMilliseconds(time.Since(started)), "response_bytes", logWriter.bytes, "correlation_id", correlationID)
 	}

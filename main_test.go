@@ -1181,6 +1181,45 @@ func TestRESTEchoRejectsInvalidAndOversizedJSON(t *testing.T) {
 	}
 }
 
+func TestGraphQLExecutionLogs(t *testing.T) {
+	for _, test := range []struct {
+		name, body, suppliedID, status, level string
+		errorCount                            float64
+	}{
+		{"success", `{"query":"{ echo(message: \"private-sentinel\") }"}`, "019047de-1234-7abc-8def-0123456789ab", "success", "INFO", 0},
+		{"execution error", `{"query":"{ private_sentinel }"}`, "private-sentinel", "failed", "WARN", 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			logger, output := newTestLogger()
+			request := httptest.NewRequest(http.MethodPost, "/graphql?private-sentinel", strings.NewReader(test.body))
+			request.Header.Set(correlationHeader, test.suppliedID)
+			response := httptest.NewRecorder()
+			newHandlerWithConfig(handlerConfig{logger: logger}).ServeHTTP(response, request)
+
+			id := response.Header().Get(correlationHeader)
+			if response.Code != http.StatusOK || !isUUIDv7(id) || (isUUIDv7(test.suppliedID) && id != test.suppliedID) {
+				t.Fatalf("HTTP status = %d, correlation ID = %q", response.Code, id)
+			}
+			records := logRecords(t, output)
+			if len(records) != 2 || records[0]["event"] != "graphql.operation.completed" || records[1]["event"] != "http.request.completed" {
+				t.Fatalf("unexpected log records: %s", output.String())
+			}
+			for _, record := range records {
+				duration, ok := record["duration_ms"].(float64)
+				if !ok || duration < 0 || record["correlation_id"] != id || record["route"] != "/graphql" {
+					t.Fatalf("unexpected duration or correlation: %#v", record)
+				}
+			}
+			if operation := records[0]; operation["status"] != test.status || operation["level"] != test.level || operation["error_count"] != test.errorCount {
+				t.Fatalf("unexpected operation outcome: %#v", operation)
+			}
+			if strings.Contains(output.String(), "private-sentinel") || strings.Contains(output.String(), "private_sentinel") {
+				t.Fatalf("request data leaked into log: %s", output.String())
+			}
+		})
+	}
+}
+
 func TestGraphQLTransportAndVariables(t *testing.T) {
 	tests := []struct {
 		name      string

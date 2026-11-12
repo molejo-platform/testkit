@@ -2,15 +2,17 @@ package main
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/graphql-go/graphql"
 )
 
 var graphQLSchema = newGraphQLSchema()
 
-func graphQL(writer http.ResponseWriter, request *http.Request) {
+func graphQL(writer http.ResponseWriter, request *http.Request, logger *slog.Logger) {
 	if request.Method != http.MethodPost {
 		writer.Header().Set("Allow", http.MethodPost)
 		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
@@ -28,10 +30,23 @@ func graphQL(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, "GraphQL query is required", http.StatusBadRequest)
 		return
 	}
+	started := time.Now()
 	result := graphql.Do(graphql.Params{
 		Schema: graphQLSchema, RequestString: payload.Query, VariableValues: payload.Variables,
 		OperationName: payload.OperationName, Context: request.Context(),
 	})
+	level, status := slog.LevelInfo, "success"
+	if len(result.Errors) > 0 {
+		level, status = slog.LevelWarn, "failed"
+	}
+	logger.LogAttrs(request.Context(), level, "GraphQL operation completed",
+		slog.String("event", "graphql.operation.completed"),
+		slog.String("route", "/graphql"),
+		slog.String("status", status),
+		slog.Int("error_count", len(result.Errors)),
+		slog.Float64("duration_ms", durationMilliseconds(time.Since(started))),
+		slog.String("correlation_id", request.Header.Get(correlationHeader)),
+	)
 	writeJSON(writer, http.StatusOK, result)
 }
 

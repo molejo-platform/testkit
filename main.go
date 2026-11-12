@@ -431,7 +431,9 @@ func newApplication(config handlerConfig) *application {
 		mux.HandleFunc("/api/diagnostics/postgres", logHTTPRequest(config.logger, "/api/diagnostics/postgres", config.diagnostics.handler))
 		mux.HandleFunc("/api/diagnostics/postgres/", logHTTPRequest(config.logger, "/api/diagnostics/postgres", config.diagnostics.handler))
 	}
-	mux.HandleFunc("/graphql", graphQL)
+	mux.HandleFunc("/graphql", logHTTPRequest(config.logger, "/graphql", func(writer http.ResponseWriter, request *http.Request) {
+		graphQL(writer, request, config.logger)
+	}))
 	mux.HandleFunc("/events", exactGET("/events", func(writer http.ResponseWriter, request *http.Request) {
 		events(writer, request, config.sseInterval, config.logger, connections)
 	}))
